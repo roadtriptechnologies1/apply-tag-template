@@ -19,7 +19,7 @@ ___INFO___
     "id": "roadtrip_technologies_explorer",
     "displayName": "Roadtrip Technologies B.V."
   },
-  "description": "explorer applies",
+  "description": "Link your ATS and GA4 to discover even more valuable insights about your campaigns.",
   "containerContexts": [
     "WEB"
   ]
