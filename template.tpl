@@ -14,12 +14,12 @@ ___INFO___
   "version": 1,
   "securityGroups": [],
   "displayName": "Roadtrip Explorer",
-  "categories": ["ADVERTISING", "ANALYTICS", "MARKETING", "REMARKETING"],
+  "categories": ["ANALYTICS"],
   "brand": {
     "id": "roadtrip_technologies_explorer",
     "displayName": "Roadtrip Technologies B.V."
   },
-  "description": "Link your ATS and GA4 to discover even more valuable insights about your campaigns.",
+  "description": "Look beyond applications. Explorer adds data from the ATS to measurement tools such as Google Analytics.",
   "containerContexts": [
     "WEB"
   ]
