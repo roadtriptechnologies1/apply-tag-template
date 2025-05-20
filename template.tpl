@@ -13,10 +13,10 @@ ___INFO___
   "id": "cvt_temp_public_id",
   "version": 1,
   "securityGroups": [],
-  "displayName": "explorer",
+  "displayName": "Roadtrip Explorer",
   "brand": {
-    "id": "brand_dummy",
-    "displayName": ""
+    "id": "roadtrip_technologies_explorer",
+    "displayName": "Roadtrip Technologies B.V."
   },
   "description": "explorer applies",
   "containerContexts": [
