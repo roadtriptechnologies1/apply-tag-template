@@ -1,5 +1,5 @@
 homepage: "https://www.roadtrip.agency"
 documentation: "https://muuh.roadtrip.agency"
 versions:
-  - sha: dce0f851d3288cff96f7283368e52ca90df329c7
+  - sha: 2288b41e42736f9bc4a958ec149a3ca34e8e5d2d
     changeNotes: Initial Release
