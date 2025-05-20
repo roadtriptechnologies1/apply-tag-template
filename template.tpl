@@ -14,7 +14,7 @@ ___INFO___
   "version": 1,
   "securityGroups": [],
   "displayName": "Roadtrip Explorer",
-  "categories": ["AFFILIATE_MARKETING", "ADVERTISING"],
+  "categories": ["ADVERTISING", "ANALYTICS", "MARKETING", "REMARKETING"],
   "brand": {
     "id": "roadtrip_technologies_explorer",
     "displayName": "Roadtrip Technologies B.V."
