@@ -1,5 +1,9 @@
 homepage: "https://www.roadtrip.agency"
 documentation: "https://muuh.roadtrip.agency"
 versions:
+  # Latest version
+  - sha: 74af16043dd453f6121bd824f33ccd82a0475531
+    changeNotes: Add thumbnail & utm fields
+  # Older versions
   - sha: 2288b41e42736f9bc4a958ec149a3ca34e8e5d2d
     changeNotes: Initial Release
