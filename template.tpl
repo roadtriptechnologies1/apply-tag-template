@@ -1,12 +1,4 @@
-﻿___TERMS_OF_SERVICE___
-
-By creating or modifying this file you agree to Google Tag Manager's Community
-Template Gallery Developer Terms of Service available at
-https://developers.google.com/tag-manager/gallery-tos (or such other URL as
-Google may provide), as modified from time to time.
-
-
-___INFO___
+﻿___INFO___
 
 {
   "type": "TAG",
@@ -14,7 +6,9 @@ ___INFO___
   "version": 1,
   "securityGroups": [],
   "displayName": "Roadtrip Explorer",
-  "categories": ["ANALYTICS"],
+  "categories": [
+    "ANALYTICS"
+  ],
   "brand": {
     "id": "roadtrip_technologies_explorer",
     "displayName": "Roadtrip Technologies B.V.",
@@ -119,6 +113,18 @@ ___TEMPLATE_PARAMETERS___
     "name": "utm_content",
     "displayName": "UTM Content",
     "simpleValueType": true
+  },
+  {
+    "type": "TEXT",
+    "name": "google_ads_gclid",
+    "displayName": "Google Ads gclid",
+    "simpleValueType": true
+  },
+  {
+    "type": "TEXT",
+    "name": "jobmatrix_id",
+    "displayName": "Jobmatrix ID",
+    "simpleValueType": true
   }
 ]
 
@@ -158,6 +164,8 @@ var postData = {
   utmTerm: data.utm_term,
   utmContent: data.utm_content,
   clientApplicationTimestamp: data.client_application_timestamp,
+  googleAdsGclid: data.google_ads_gclid,
+  jobmatrixId: data.jobmatrix_id,
 };
 
 var queryString = buildQueryString(postData);
