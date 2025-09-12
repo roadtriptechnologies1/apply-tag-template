@@ -2,8 +2,10 @@ homepage: "https://www.roadtrip.agency"
 documentation: "https://muuh.roadtrip.agency"
 versions:
   # Latest version
+  - sha: 76b5f7303ebda4aec810c68377b482e5b7a84190
+    changeNotes: Add fields for google ads & jobmatrix
+  # Older versions
   - sha: 74af16043dd453f6121bd824f33ccd82a0475531
     changeNotes: Add thumbnail & utm fields
-  # Older versions
   - sha: 2288b41e42736f9bc4a958ec149a3ca34e8e5d2d
     changeNotes: Initial Release
