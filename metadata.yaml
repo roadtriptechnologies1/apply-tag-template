@@ -3,8 +3,10 @@ documentation: "https://muuh.roadtrip.agency"
 versions:
   # Latest version
   - sha: 4be6a33307e44234dda57628adb65e1d314ee762
-    changeNotes: Add back ToS
+    changeNotes: Add sessionId, apply type, currentUrl
   # Older versions
+  - sha: 4be6a33307e44234dda57628adb65e1d314ee762
+    changeNotes: Add back ToS
   - sha: 0a831417d35697e919bdd1242fb29cd9eec16985
     changeNotes: Bump version with new fields for google ads & jobmatrix
   - sha: 76b5f7303ebda4aec810c68377b482e5b7a84190
