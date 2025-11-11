@@ -33,6 +33,27 @@ ___TEMPLATE_PARAMETERS___
 
 [
   {
+    "type": "SELECT",
+    "name": "type",
+    "displayName": "Type",
+    "macrosInSelect": false,
+    "selectItems": [
+      {
+        "value": "apply_complete",
+        "displayValue": "Apply Complete"
+      },
+      {
+        "value": "job_detail_view",
+        "displayValue": "Job Detail View"
+      },
+      {
+        "value": "apply_start",
+        "displayValue": "Apply Start"
+      }
+    ],
+    "simpleValueType": true
+  },
+  {
     "type": "TEXT",
     "name": "roadtrip_client_uuid",
     "displayName": "Roadtrip Client UUID",
@@ -139,8 +160,35 @@ ___TEMPLATE_PARAMETERS___
 
 ___SANDBOXED_JS_FOR_WEB_TEMPLATE___
 
+const getUrl = require('getUrl');
+const log = require('logToConsole');
+const setCookie = require('setCookie');
 const sendPixel = require('sendPixel');
+const getCookie = require('getCookieValues');
+const generateRandom = require('generateRandom');
 const encodeUriComponent = require('encodeUriComponent');
+
+const currentUrl = getUrl();
+
+const sessionCookieName = 'rx_session';
+const sessionIdFromCookie = getCookie(sessionCookieName)[0];
+
+let sessionId = sessionIdFromCookie;
+
+const cookieOptionsSession = {
+    domain: 'auto',
+    path: '/',
+    'max-age': 30 * 60,
+    samesite: 'Lax',
+    secure: true
+};
+
+if (!sessionId) {
+    sessionId = generateRandom(1000000, 9999999) + '.' + generateRandom(1000000, 9999999);
+    setCookie(sessionCookieName, sessionId, cookieOptionsSession);
+} else {
+    setCookie(sessionCookieName, sessionId, cookieOptionsSession);
+}
 
 function buildQueryString(obj) {
   var parts = [];
@@ -157,6 +205,7 @@ function buildQueryString(obj) {
 var url = 'https://muuh.roadtrip.agency/api/v2/apply';
 
 var postData = {
+  type: data.type,
   roadtripClientUuid: data.roadtrip_client_uuid,
   roadtripUniqueId: data.roadtrip_unique_id,
   atsJobId: data.ats_job_id,
@@ -174,6 +223,8 @@ var postData = {
   clientApplicationTimestamp: data.client_application_timestamp,
   googleAdsGclid: data.google_ads_gclid,
   jobmatrixId: data.jobmatrix_id,
+  sessionId: sessionId,
+  currentUrl: currentUrl
 };
 
 var queryString = buildQueryString(postData);
@@ -218,6 +269,151 @@ ___WEB_PERMISSIONS___
     },
     "clientAnnotations": {
       "isEditedByUser": true
+    },
+    "isRequired": true
+  },
+  {
+    "instance": {
+      "key": {
+        "publicId": "get_cookies",
+        "versionId": "1"
+      },
+      "param": [
+        {
+          "key": "cookieAccess",
+          "value": {
+            "type": 1,
+            "string": "specific"
+          }
+        },
+        {
+          "key": "cookieNames",
+          "value": {
+            "type": 2,
+            "listItem": [
+              {
+                "type": 1,
+                "string": "rx_session"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "clientAnnotations": {
+      "isEditedByUser": true
+    },
+    "isRequired": true
+  },
+  {
+    "instance": {
+      "key": {
+        "publicId": "set_cookies",
+        "versionId": "1"
+      },
+      "param": [
+        {
+          "key": "allowedCookies",
+          "value": {
+            "type": 2,
+            "listItem": [
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "name"
+                  },
+                  {
+                    "type": 1,
+                    "string": "domain"
+                  },
+                  {
+                    "type": 1,
+                    "string": "path"
+                  },
+                  {
+                    "type": 1,
+                    "string": "secure"
+                  },
+                  {
+                    "type": 1,
+                    "string": "session"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "rx_session"
+                  },
+                  {
+                    "type": 1,
+                    "string": "*"
+                  },
+                  {
+                    "type": 1,
+                    "string": "*"
+                  },
+                  {
+                    "type": 1,
+                    "string": "secure"
+                  },
+                  {
+                    "type": 1,
+                    "string": "any"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "clientAnnotations": {
+      "isEditedByUser": true
+    },
+    "isRequired": true
+  },
+  {
+    "instance": {
+      "key": {
+        "publicId": "logging",
+        "versionId": "1"
+      },
+      "param": [
+        {
+          "key": "environments",
+          "value": {
+            "type": 1,
+            "string": "debug"
+          }
+        }
+      ]
+    },
+    "isRequired": true
+  },
+  {
+    "instance": {
+      "key": {
+        "publicId": "get_url",
+        "versionId": "1"
+      },
+      "param": [
+        {
+          "key": "urlParts",
+          "value": {
+            "type": 1,
+            "string": "any"
+          }
+        },
+        {
+          "key": "queriesAllowed",
+          "value": {
+            "type": 1,
+            "string": "any"
+          }
+        }
+      ]
     },
     "isRequired": true
   }
