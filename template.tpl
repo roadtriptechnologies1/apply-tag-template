@@ -49,6 +49,10 @@ ___TEMPLATE_PARAMETERS___
       {
         "value": "apply_start",
         "displayValue": "Apply Start"
+      },
+      {
+        "value": "other",
+        "displayValue": "Other"
       }
     ],
     "simpleValueType": true
@@ -97,62 +101,14 @@ ___TEMPLATE_PARAMETERS___
   },
   {
     "type": "TEXT",
-    "name": "facebook_id",
-    "displayName": "Facebook ID",
-    "simpleValueType": true
-  },
-  {
-    "type": "TEXT",
-    "name": "linked_in_id",
-    "displayName": "LinkedIn ID",
-    "simpleValueType": true
-  },
-  {
-    "type": "TEXT",
-    "name": "client_application_timestamp",
-    "displayName": "Client Application Timestamp",
-    "simpleValueType": true
-  },
-  {
-    "type": "TEXT",
-    "name": "utm_source",
-    "displayName": "UTM Source",
-    "simpleValueType": true
-  },
-  {
-    "type": "TEXT",
-    "name": "utm_medium",
-    "displayName": "UTM Medium",
-    "simpleValueType": true
-  },
-  {
-    "type": "TEXT",
-    "name": "utm_campaign",
-    "displayName": "UTM Campaign",
-    "simpleValueType": true
-  },
-  {
-    "type": "TEXT",
-    "name": "utm_term",
-    "displayName": "UTM Term",
-    "simpleValueType": true
-  },
-  {
-    "type": "TEXT",
-    "name": "utm_content",
-    "displayName": "UTM Content",
-    "simpleValueType": true
-  },
-  {
-    "type": "TEXT",
-    "name": "google_ads_gclid",
-    "displayName": "Google Ads gclid",
-    "simpleValueType": true
-  },
-  {
-    "type": "TEXT",
     "name": "jobmatrix_id",
     "displayName": "Jobmatrix ID",
+    "simpleValueType": true
+  },
+  {
+    "type": "TEXT",
+    "name": "url_params_storage_duration_days",
+    "displayName": "URL params storage duration in days",
     "simpleValueType": true
   }
 ]
@@ -161,48 +117,118 @@ ___TEMPLATE_PARAMETERS___
 ___SANDBOXED_JS_FOR_WEB_TEMPLATE___
 
 const getUrl = require('getUrl');
-const log = require('logToConsole');
+const logToConsole = require('logToConsole');
 const setCookie = require('setCookie');
 const sendPixel = require('sendPixel');
+const timestamp = require('getTimestamp');
 const getCookie = require('getCookieValues');
 const generateRandom = require('generateRandom');
-const encodeUriComponent = require('encodeUriComponent');
+const encode = require('encodeUriComponent');
+const decode = require('decodeUriComponent');
 
 const currentUrl = getUrl();
+var urlParamsStorageDurationDays = data.url_params_storage_duration_days;
+if (!urlParamsStorageDurationDays) {
+  urlParamsStorageDurationDays = 90;
+}
 
-const sessionCookieName = 'rx_session';
-const sessionIdFromCookie = getCookie(sessionCookieName)[0];
+const COOKIE = {
+  SESSION: 'rx_session',
+  PARAMS: 'rx_params',
+  LINKEDIN: 'li_fat_id',
+  FACEBOOK: '_fbp',
+  GOOGLE_ADS: '_gcl_aw'
+};
 
-let sessionId = sessionIdFromCookie;
-
-const cookieOptionsSession = {
+const COOKIE_OPTIONS = {
+  session: {
     domain: 'auto',
     path: '/',
     'max-age': 30 * 60,
     samesite: 'Lax',
     secure: true
+  },
+  params: {
+    domain: 'auto',
+    path: '/',
+    'max-age': urlParamsStorageDurationDays * 24 * 60 * 60,
+    samesite: 'Lax',
+    secure: true
+  }
 };
 
-if (!sessionId) {
-    sessionId = generateRandom(1000000, 9999999) + '.' + generateRandom(1000000, 9999999);
-    setCookie(sessionCookieName, sessionId, cookieOptionsSession);
-} else {
-    setCookie(sessionCookieName, sessionId, cookieOptionsSession);
+function parseQuery(query) {
+  var result = {};
+  if (!query) return result;
+  var pairs = query.split('&');
+  for (var i = 0; i < pairs.length; i++) {
+    var parts = pairs[i].split('=');
+    if (!parts[0]) continue;
+    var key = decode(parts[0]).toLowerCase();
+    var value = parts.length > 1 ? decode(parts[1]) : '';
+    result[key] = value;
+  }
+  return result;
 }
 
-function buildQueryString(obj) {
+function buildQuery(obj) {
   var parts = [];
   for (var key in obj) {
     if (obj.hasOwnProperty(key) && obj[key] != null) {
-      var encodedKey = encodeUriComponent(key);
-      var encodedValue = encodeUriComponent(obj[key]);
-      parts.push(encodedKey + '=' + encodedValue);
+      parts.push(encode(key) + '=' + encode(obj[key]));
     }
   }
   return parts.join('&');
 }
 
-var url = 'https://muuh.roadtrip.agency/api/v2/apply';
+function buildRawQuery(obj) {
+  var parts = [];
+  for (var key in obj) {
+    if (obj.hasOwnProperty(key) && obj[key] != null) {
+      parts.push(key + '=' + obj[key]);
+    }
+  }
+  return parts.join('&');
+}
+
+function parseCookieParams(cookieValue) {
+  return cookieValue ? parseQuery(cookieValue) : {};
+}
+
+function randomSessionId() {
+  return generateRandom(1000000, 9999999) + '.' + generateRandom(1000000, 9999999);
+}
+
+var cookies = {
+  session: getCookie(COOKIE.SESSION)[0],
+  params: getCookie(COOKIE.PARAMS)[0],
+  linkedin: getCookie(COOKIE.LINKEDIN)[0],
+  facebook: getCookie(COOKIE.FACEBOOK)[0],
+  googleAds: getCookie(COOKIE.GOOGLE_ADS)[0]
+};
+
+var sessionId = cookies.session || randomSessionId();
+setCookie(COOKIE.SESSION, sessionId, COOKIE_OPTIONS.session);
+
+var urlParams = parseQuery(getUrl('query'));
+var storedParams = parseCookieParams(cookies.params);
+
+var UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+var hasUtm = false;
+
+for (var i = 0; i < UTM_KEYS.length; i++) {
+  var key = UTM_KEYS[i];
+  if (urlParams[key]) {
+    storedParams[key] = urlParams[key];
+    hasUtm = true;
+  }
+}
+
+if (hasUtm) {
+  setCookie(COOKIE.PARAMS, buildRawQuery(storedParams), COOKIE_OPTIONS.params);
+}
+
+var utm = parseCookieParams(getCookie(COOKIE.PARAMS)[0]);
 
 var postData = {
   type: data.type,
@@ -213,26 +239,22 @@ var postData = {
   atsApplicationId: data.ats_application_id,
   googleClientId: data.google_client_id,
   googleSessionId: data.google_session_id,
-  facebookId: data.facebook_id,
-  linkedInId: data.linked_in_id,
-  utmSource: data.utm_source,
-  utmMedium: data.utm_medium,
-  utmCampaign: data.utm_campaign,
-  utmTerm: data.utm_term,
-  utmContent: data.utm_content,
-  clientApplicationTimestamp: data.client_application_timestamp,
-  googleAdsGclid: data.google_ads_gclid,
+  facebookId: cookies.facebook,
+  linkedInId: cookies.linkedin,
+  googleAdsGclid: cookies.googleAds,
+  utmSource: utm.utm_source,
+  utmMedium: utm.utm_medium,
+  utmCampaign: utm.utm_campaign,
+  utmTerm: utm.utm_term,
+  utmContent: utm.utm_content,
+  clientApplicationTimestamp: timestamp(),
   jobmatrixId: data.jobmatrix_id,
   sessionId: sessionId,
   currentUrl: currentUrl
 };
 
-var queryString = buildQueryString(postData);
-
-var pixelUrl = url + '?' + queryString;
-
+var pixelUrl = 'https://muuh.roadtrip.agency/api/v2/apply?' + buildQuery(postData);
 sendPixel(pixelUrl);
-
 data.gtmOnSuccess();
 
 
@@ -294,6 +316,22 @@ ___WEB_PERMISSIONS___
               {
                 "type": 1,
                 "string": "rx_session"
+              },
+              {
+                "type": 1,
+                "string": "rx_params"
+              },
+              {
+                "type": 1,
+                "string": "li_fat_id"
+              },
+              {
+                "type": 1,
+                "string": "_fbp"
+              },
+              {
+                "type": 1,
+                "string": "_gcl_aw"
               }
             ]
           }
@@ -363,6 +401,53 @@ ___WEB_PERMISSIONS___
                     "string": "any"
                   }
                 ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "name"
+                  },
+                  {
+                    "type": 1,
+                    "string": "domain"
+                  },
+                  {
+                    "type": 1,
+                    "string": "path"
+                  },
+                  {
+                    "type": 1,
+                    "string": "secure"
+                  },
+                  {
+                    "type": 1,
+                    "string": "session"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "rx_params"
+                  },
+                  {
+                    "type": 1,
+                    "string": "*"
+                  },
+                  {
+                    "type": 1,
+                    "string": "*"
+                  },
+                  {
+                    "type": 1,
+                    "string": "secure"
+                  },
+                  {
+                    "type": 1,
+                    "string": "any"
+                  }
+                ]
               }
             ]
           }
@@ -390,6 +475,9 @@ ___WEB_PERMISSIONS___
         }
       ]
     },
+    "clientAnnotations": {
+      "isEditedByUser": true
+    },
     "isRequired": true
   },
   {
@@ -414,6 +502,9 @@ ___WEB_PERMISSIONS___
           }
         }
       ]
+    },
+    "clientAnnotations": {
+      "isEditedByUser": true
     },
     "isRequired": true
   }
