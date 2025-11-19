@@ -117,14 +117,15 @@ ___TEMPLATE_PARAMETERS___
 ___SANDBOXED_JS_FOR_WEB_TEMPLATE___
 
 const getUrl = require('getUrl');
-const logToConsole = require('logToConsole');
 const setCookie = require('setCookie');
 const sendPixel = require('sendPixel');
+const readTitle = require('readTitle');
 const timestamp = require('getTimestamp');
 const getCookie = require('getCookieValues');
-const generateRandom = require('generateRandom');
 const encode = require('encodeUriComponent');
 const decode = require('decodeUriComponent');
+const generateRandom = require('generateRandom');
+const getReferrerUrl = require('getReferrerUrl');
 
 const currentUrl = getUrl();
 var urlParamsStorageDurationDays = data.url_params_storage_duration_days;
@@ -250,7 +251,9 @@ var postData = {
   clientApplicationTimestamp: timestamp(),
   jobmatrixId: data.jobmatrix_id,
   sessionId: sessionId,
-  currentUrl: currentUrl
+  currentUrl: currentUrl,
+  pageTitle: readTitle(),
+  referrer: getReferrerUrl()
 };
 
 var pixelUrl = 'https://muuh.roadtrip.agency/api/v2/apply?' + buildQuery(postData);
@@ -462,27 +465,6 @@ ___WEB_PERMISSIONS___
   {
     "instance": {
       "key": {
-        "publicId": "logging",
-        "versionId": "1"
-      },
-      "param": [
-        {
-          "key": "environments",
-          "value": {
-            "type": 1,
-            "string": "debug"
-          }
-        }
-      ]
-    },
-    "clientAnnotations": {
-      "isEditedByUser": true
-    },
-    "isRequired": true
-  },
-  {
-    "instance": {
-      "key": {
         "publicId": "get_url",
         "versionId": "1"
       },
@@ -505,6 +487,44 @@ ___WEB_PERMISSIONS___
     },
     "clientAnnotations": {
       "isEditedByUser": true
+    },
+    "isRequired": true
+  },
+  {
+    "instance": {
+      "key": {
+        "publicId": "get_referrer",
+        "versionId": "1"
+      },
+      "param": [
+        {
+          "key": "urlParts",
+          "value": {
+            "type": 1,
+            "string": "any"
+          }
+        },
+        {
+          "key": "queriesAllowed",
+          "value": {
+            "type": 1,
+            "string": "any"
+          }
+        }
+      ]
+    },
+    "clientAnnotations": {
+      "isEditedByUser": true
+    },
+    "isRequired": true
+  },
+  {
+    "instance": {
+      "key": {
+        "publicId": "read_title",
+        "versionId": "1"
+      },
+      "param": []
     },
     "isRequired": true
   }
