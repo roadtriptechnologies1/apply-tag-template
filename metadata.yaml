@@ -2,9 +2,11 @@ homepage: "https://www.roadtrip.agency"
 documentation: "https://muuh.roadtrip.agency"
 versions:
   # Latest version
+  - sha: 2a1af78c2d9dc9078ef4fa87e2983f2f0385aa20
+    changeNotes: Add pageTitle and referrer
+  # Older versions
   - sha: 29edd9d44e17670696de7f8e5c62fcd7229cea7c
     changeNotes: Add other as a new type
-  # Older versions
   - sha: d64f9d8b24344008de1321dc086a621a8d4090f4
     changeNotes: Add sessionId, apply type, currentUrl
   - sha: 4be6a33307e44234dda57628adb65e1d314ee762
