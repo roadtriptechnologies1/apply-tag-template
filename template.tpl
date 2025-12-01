@@ -143,14 +143,12 @@ const COOKIE = {
 
 const COOKIE_OPTIONS = {
   session: {
-    domain: 'auto',
     path: '/',
     'max-age': 30 * 60,
     samesite: 'Lax',
     secure: true
   },
   params: {
-    domain: 'auto',
     path: '/',
     'max-age': urlParamsStorageDurationDays * 24 * 60 * 60,
     samesite: 'Lax',
