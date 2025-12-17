@@ -110,6 +110,103 @@ ___TEMPLATE_PARAMETERS___
     "name": "url_params_storage_duration_days",
     "displayName": "URL params storage duration in days",
     "simpleValueType": true
+  },
+  {
+    "type": "GROUP",
+    "name": "job_variable_group",
+    "displayName": "Job variables",
+    "groupStyle": "ZIPPY_CLOSED",
+    "subParams": [
+      {
+        "type": "SIMPLE_TABLE",
+        "name": "job_variable_table",
+        "displayName": "",
+        "simpleTableColumns": [
+          {
+            "defaultValue": "",
+            "displayName": "Name",
+            "name": "variable_name",
+            "type": "SELECT",
+            "selectItems": [
+              {
+                "value": "job_location",
+                "displayValue": "Job Location"
+              },
+              {
+                "value": "job_location_secondary",
+                "displayValue": "Job Location Secondary"
+              },
+              {
+                "value": "job_contract_type",
+                "displayValue": "Job Contract Type"
+              },
+              {
+                "value": "job_salary",
+                "displayValue": "Job Salary"
+              },
+              {
+                "value": "job_recruiter",
+                "displayValue": "Job Recruiter"
+              },
+              {
+                "value": "job_department",
+                "displayValue": "Job Department"
+              },
+              {
+                "value": "job_department_secondary",
+                "displayValue": "Job Department Secondary"
+              },
+              {
+                "value": "job_experience",
+                "displayValue": "Job Experience"
+              },
+              {
+                "value": "job_hours",
+                "displayValue": "Job Hours"
+              },
+              {
+                "value": "job_education",
+                "displayValue": "Job Education"
+              },
+              {
+                "value": "job_discipline",
+                "displayValue": "Job Discipline"
+              },
+              {
+                "value": "job_category",
+                "displayValue": "Job Category"
+              },
+              {
+                "value": "job_custom_one",
+                "displayValue": "Job Custom One"
+              },
+              {
+                "value": "job_custom_two",
+                "displayValue": "Job Custom Two"
+              },
+              {
+                "value": "job_custom_three",
+                "displayValue": "Job Custom Three"
+              },
+              {
+                "value": "job_custom_four",
+                "displayValue": "Job Custom Four"
+              },
+              {
+                "value": "job_custom_five",
+                "displayValue": "Job Custom Five"
+              }
+            ]
+          },
+          {
+            "defaultValue": "",
+            "displayName": "Value",
+            "name": "variable_value",
+            "type": "TEXT"
+          }
+        ]
+      }
+    ]
   }
 ]
 
@@ -198,6 +295,19 @@ function randomSessionId() {
   return generateRandom(1000000, 9999999) + '.' + generateRandom(1000000, 9999999);
 }
 
+function normalizeJobVariables(table) {
+  var result = {};
+  if (!table || !table.length) return result;
+
+  for (var i = 0; i < table.length; i++) {
+    var row = table[i];
+    if (row.variable_name && row.variable_value != null) {
+      result[row.variable_name] = row.variable_value;
+    }
+  }
+  return result;
+}
+
 var cookies = {
   session: getCookie(COOKIE.SESSION)[0],
   params: getCookie(COOKIE.PARAMS)[0],
@@ -253,6 +363,14 @@ var postData = {
   pageTitle: readTitle(),
   referrer: getReferrerUrl()
 };
+
+var jobVariables = normalizeJobVariables(data.job_variable_table);
+
+for (var key in jobVariables) {
+  if (jobVariables.hasOwnProperty(key)) {
+    postData[key] = jobVariables[key];
+  }
+}
 
 var pixelUrl = 'https://muuh.roadtrip.agency/api/v2/apply?' + buildQuery(postData);
 sendPixel(pixelUrl);
