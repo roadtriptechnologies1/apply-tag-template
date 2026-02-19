@@ -272,8 +272,13 @@ function parseQuery(query) {
   for (var i = 0; i < pairs.length; i++) {
     var parts = pairs[i].split('=');
     if (!parts[0]) continue;
-    var key = decode(parts[0]).toLowerCase();
-    var value = parts.length > 1 ? decode(parts[1]) : '';
+
+    // Convert + to space before decoding (key and value)
+    var rawKey = parts[0].replace(/\+/g, ' ');
+    var rawVal = parts.length > 1 ? parts[1].replace(/\+/g, ' ') : '';
+
+    var key = decode(rawKey).toLowerCase();
+    var value = decode(rawVal);
     result[key] = value;
   }
   return result;
@@ -289,14 +294,9 @@ function buildQuery(obj) {
   return parts.join('&');
 }
 
-function buildRawQuery(obj) {
-  var parts = [];
-  for (var key in obj) {
-    if (obj.hasOwnProperty(key) && obj[key] != null) {
-      parts.push(key + '=' + obj[key]);
-    }
-  }
-  return parts.join('&');
+// Encoded cookie serializer (prevents &, =, spaces from corrupting cookie)
+function buildCookieQuery(obj) {
+  return buildQuery(obj);
 }
 
 function parseCookieParams(cookieValue) {
@@ -332,16 +332,27 @@ var cookies = {
 var sessionId = cookies.session;
 var storedParams = parseCookieParams(cookies.params);
 
-// --- CROSS-DOMAIN RECEIVER LOGIC ---
+// Cross-domain receiver: safe decode and parse with validation
 if (urlParams['_rx_linker']) {
-  var parsedLinker = JSON.parse(decode(urlParams['_rx_linker']));
-  if (parsedLinker) {
-    if (parsedLinker.s) {
-      sessionId = parsedLinker.s;
+  try {
+    var linkerRaw = urlParams['_rx_linker'];
+
+    // Basic size guard
+    if (linkerRaw.length < 4000) {
+      var decodedLinker = decode(linkerRaw);
+      var parsedLinker = JSON.parse(decodedLinker);
+
+      if (parsedLinker && typeof parsedLinker === 'object') {
+        if (parsedLinker.s && typeof parsedLinker.s === 'string') {
+          sessionId = parsedLinker.s;
+        }
+        if (parsedLinker.p && typeof parsedLinker.p === 'object') {
+          storedParams = parsedLinker.p;
+        }
+      }
     }
-    if (parsedLinker.p) {
-      storedParams = parsedLinker.p;
-    }
+  } catch (e) {
+    // swallow to avoid breaking tag
   }
 }
 
@@ -351,17 +362,16 @@ if (!sessionId) {
 setCookie(COOKIE.SESSION, sessionId, COOKIE_OPTIONS.session);
 
 var UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
-var hasUtm = false;
 
 for (var i = 0; i < UTM_KEYS.length; i++) {
   var key = UTM_KEYS[i];
   if (urlParams[key]) {
     storedParams[key] = urlParams[key];
-    hasUtm = true;
   }
 }
 
-setCookie(COOKIE.PARAMS, buildRawQuery(storedParams), COOKIE_OPTIONS.params);
+// Store params cookie with encoded values
+setCookie(COOKIE.PARAMS, buildCookieQuery(storedParams), COOKIE_OPTIONS.params);
 var utm = storedParams;
 
 var postData = {
@@ -390,25 +400,34 @@ var postData = {
 };
 
 var jobVariables = normalizeJobVariables(data.job_variable_table);
-
-for (var key in jobVariables) {
-  if (jobVariables.hasOwnProperty(key)) {
-    postData[key] = jobVariables[key];
+for (var jKey in jobVariables) {
+  if (jobVariables.hasOwnProperty(jKey)) {
+    postData[jKey] = jobVariables[jKey];
   }
 }
 
 var pixelUrl = 'https://muuh.roadtrip.agency/api/v2/apply?' + buildQuery(postData);
-sendPixel(pixelUrl);
 
-// --- CROSS-DOMAIN SENDER LOGIC ---
+// Pixel is primary success signal (script is best-effort)
+sendPixel(
+  pixelUrl,
+  function() {
+    data.gtmOnSuccess();
+  },
+  function() {
+    data.gtmOnFailure();
+  }
+);
+
+// Cross-domain sender logic
 var linkedDomainsStr = data.linked_domains || 'auto';
 var domains = [];
 if (linkedDomainsStr === 'auto') {
   domains.push(getUrl('host'));
 } else {
   var splitDomains = linkedDomainsStr.split(',');
-  for (var j = 0; j < splitDomains.length; j++) {
-    domains.push(splitDomains[j].trim());
+  for (var k = 0; k < splitDomains.length; k++) {
+    domains.push(splitDomains[k].trim());
   }
 }
 
@@ -417,13 +436,25 @@ var linkerPayload = {
   p: storedParams
 };
 
-setInWindow('_rxConfig', {
-  domains: domains,
-  payload: encode(JSON.stringify(linkerPayload))
-}, true);
+setInWindow(
+  '_rxConfig',
+  {
+    domains: domains,
+    payload: encode(JSON.stringify(linkerPayload))
+  },
+  true
+);
 
-const linkerScriptUrl = 'https://persistexplorer.ams3.cdn.digitaloceanspaces.com/rx-linker.js';
-injectScript(linkerScriptUrl, data.gtmOnSuccess, data.gtmOnFailure, 'rxLinkerScript');
+const linkerScriptUrl =
+  'https://persistexplorer.ams3.cdn.digitaloceanspaces.com/rx-linker.js';
+
+// Best-effort injection, not controlling tag success/failure
+injectScript(
+  linkerScriptUrl,
+  function() {},
+  function() {},
+  'rxLinkerScript'
+);
 
 
 ___WEB_PERMISSIONS___
@@ -1746,7 +1777,7 @@ scenarios:
     mock('injectScript', function(url, onSuccess) { onSuccess(); });
     mock('setInWindow', function() {});
     runCode(mockData);
-    assertThat(paramsCookieValue).contains('utm_campaign=jobs&promotions');
+    assertThat(paramsCookieValue).contains('utm_campaign=jobs%26promotions');
 
 
 ___NOTES___
