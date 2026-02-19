@@ -2,9 +2,11 @@ homepage: "https://www.roadtrip.agency"
 documentation: "https://muuh.roadtrip.agency"
 versions:
   # Latest version
+  - sha: 0699dcfde2830fdf1958cd29b9f7247f6c076c53
+    changeNotes: Add functionality for cross-domain
+  # Older versions
   - sha: 355811e95f16c39e0e22df9c1963dd7cceadbb4c
     changeNotes: Add job variables
-  # Older versions
   - sha: 26faa1f14aa0c2600a151a15db8f9ef21620f41e
     changeNotes: Remove domain from cookie options
   - sha: 72641cddb65f1d3f1870cdf95d8f1dfd48a24c25
