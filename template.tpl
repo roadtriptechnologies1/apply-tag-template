@@ -1,4 +1,4 @@
-﻿___TERMS_OF_SERVICE___
+___TERMS_OF_SERVICE___
 
 By creating or modifying this file you agree to Google Tag Manager's Community
 Template Gallery Developer Terms of Service available at
@@ -112,6 +112,15 @@ ___TEMPLATE_PARAMETERS___
     "simpleValueType": true
   },
   {
+    "type": "TEXT",
+    "name": "linked_domains",
+    "displayName": "Linked Domains for Cross-Domain Tracking",
+    "help": "Comma-separated list of domains to pass tracking data to (e.g., jobs.company.com, ats.com). Leave as 'auto' to use the current hostname.",
+    "defaultValue": "auto",
+    "simpleValueType": true,
+    "alwaysInSummary": true
+  },
+  {
     "type": "GROUP",
     "name": "job_variable_group",
     "displayName": "Job variables",
@@ -223,6 +232,9 @@ const encode = require('encodeUriComponent');
 const decode = require('decodeUriComponent');
 const generateRandom = require('generateRandom');
 const getReferrerUrl = require('getReferrerUrl');
+const injectScript = require('injectScript');
+const setInWindow = require('setInWindow');
+const JSON = require('JSON');
 
 const currentUrl = getUrl();
 var urlParamsStorageDurationDays = data.url_params_storage_duration_days;
@@ -308,6 +320,7 @@ function normalizeJobVariables(table) {
   return result;
 }
 
+var urlParams = parseQuery(getUrl('query'));
 var cookies = {
   session: getCookie(COOKIE.SESSION)[0],
   params: getCookie(COOKIE.PARAMS)[0],
@@ -316,11 +329,26 @@ var cookies = {
   googleAds: getCookie(COOKIE.GOOGLE_ADS)[0]
 };
 
-var sessionId = cookies.session || randomSessionId();
-setCookie(COOKIE.SESSION, sessionId, COOKIE_OPTIONS.session);
-
-var urlParams = parseQuery(getUrl('query'));
+var sessionId = cookies.session;
 var storedParams = parseCookieParams(cookies.params);
+
+// --- CROSS-DOMAIN RECEIVER LOGIC ---
+if (urlParams['_rx_linker']) {
+  var parsedLinker = JSON.parse(decode(urlParams['_rx_linker']));
+  if (parsedLinker) {
+    if (parsedLinker.s) {
+      sessionId = parsedLinker.s;
+    }
+    if (parsedLinker.p) {
+      storedParams = parsedLinker.p;
+    }
+  }
+}
+
+if (!sessionId) {
+  sessionId = randomSessionId();
+}
+setCookie(COOKIE.SESSION, sessionId, COOKIE_OPTIONS.session);
 
 var UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
 var hasUtm = false;
@@ -333,11 +361,8 @@ for (var i = 0; i < UTM_KEYS.length; i++) {
   }
 }
 
-if (hasUtm) {
-  setCookie(COOKIE.PARAMS, buildRawQuery(storedParams), COOKIE_OPTIONS.params);
-}
-
-var utm = parseCookieParams(getCookie(COOKIE.PARAMS)[0]);
+setCookie(COOKIE.PARAMS, buildRawQuery(storedParams), COOKIE_OPTIONS.params);
+var utm = storedParams;
 
 var postData = {
   type: data.type,
@@ -374,7 +399,31 @@ for (var key in jobVariables) {
 
 var pixelUrl = 'https://muuh.roadtrip.agency/api/v2/apply?' + buildQuery(postData);
 sendPixel(pixelUrl);
-data.gtmOnSuccess();
+
+// --- CROSS-DOMAIN SENDER LOGIC ---
+var linkedDomainsStr = data.linked_domains || 'auto';
+var domains = [];
+if (linkedDomainsStr === 'auto') {
+  domains.push(getUrl('host'));
+} else {
+  var splitDomains = linkedDomainsStr.split(',');
+  for (var j = 0; j < splitDomains.length; j++) {
+    domains.push(splitDomains[j].trim());
+  }
+}
+
+var linkerPayload = {
+  s: sessionId,
+  p: storedParams
+};
+
+setInWindow('_rxConfig', {
+  domains: domains,
+  payload: encode(JSON.stringify(linkerPayload))
+}, true);
+
+const linkerScriptUrl = 'https://persistexplorer.ams3.cdn.digitaloceanspaces.com/rx-linker.js';
+injectScript(linkerScriptUrl, data.gtmOnSuccess, data.gtmOnFailure, 'rxLinkerScript');
 
 
 ___WEB_PERMISSIONS___
@@ -643,6 +692,93 @@ ___WEB_PERMISSIONS___
       "param": []
     },
     "isRequired": true
+  },
+  {
+    "instance": {
+      "key": {
+        "publicId": "inject_script",
+        "versionId": "1"
+      },
+      "param": [
+        {
+          "key": "urls",
+          "value": {
+            "type": 2,
+            "listItem": [
+              {
+                "type": 1,
+                "string": "https://persistexplorer.ams3.cdn.digitaloceanspaces.com/rx-linker.js"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "clientAnnotations": {
+      "isEditedByUser": true
+    },
+    "isRequired": true
+  },
+  {
+    "instance": {
+      "key": {
+        "publicId": "access_globals",
+        "versionId": "1"
+      },
+      "param": [
+        {
+          "key": "keys",
+          "value": {
+            "type": 2,
+            "listItem": [
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  },
+                  {
+                    "type": 1,
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "_rxConfig"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "clientAnnotations": {
+      "isEditedByUser": true
+    },
+    "isRequired": true
   }
 ]
 
@@ -654,6 +790,4 @@ scenarios: []
 
 ___NOTES___
 
-Created on 6/9/2025, 3:51:47 PM
-
-
+Created on 2/19/2026, 11:35:00 AM
