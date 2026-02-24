@@ -66,7 +66,8 @@ ___TEMPLATE_PARAMETERS___
   {
     "type": "TEXT",
     "name": "roadtrip_unique_id",
-    "displayName": "Roadtrip Unique ID",
+    "displayName": "Roadtrip Unique ID (optional)",
+    "help": "Leave empty to auto-generate a unique ID per event. Only set this if you need to supply your own identifier and you're really sure.",
     "simpleValueType": true
   },
   {
@@ -272,11 +273,8 @@ function parseQuery(query) {
   for (var i = 0; i < pairs.length; i++) {
     var parts = pairs[i].split('=');
     if (!parts[0]) continue;
-
-    // Convert + to space before decoding (key and value)
-    var rawKey = parts[0].replace(/\+/g, ' ');
-    var rawVal = parts.length > 1 ? parts[1].replace(/\+/g, ' ') : '';
-
+    var rawKey = parts[0].split('+').join('%20');
+    var rawVal = parts.length > 1 ? parts[1].split('+').join('%20') : '';
     var key = decode(rawKey).toLowerCase();
     var value = decode(rawVal);
     result[key] = value;
@@ -294,7 +292,6 @@ function buildQuery(obj) {
   return parts.join('&');
 }
 
-// Encoded cookie serializer (prevents &, =, spaces from corrupting cookie)
 function buildCookieQuery(obj) {
   return buildQuery(obj);
 }
@@ -303,14 +300,13 @@ function parseCookieParams(cookieValue) {
   return cookieValue ? parseQuery(cookieValue) : {};
 }
 
-function randomSessionId() {
+function randomId() {
   return generateRandom(1000000, 9999999) + '.' + generateRandom(1000000, 9999999);
 }
 
 function normalizeJobVariables(table) {
   var result = {};
   if (!table || !table.length) return result;
-
   for (var i = 0; i < table.length; i++) {
     var row = table[i];
     if (row.variable_name && row.variable_value != null) {
@@ -332,37 +328,37 @@ var cookies = {
 var sessionId = cookies.session;
 var storedParams = parseCookieParams(cookies.params);
 
-// Cross-domain receiver: safe decode and parse with validation
-if (urlParams['_rx_linker']) {
-  try {
-    var linkerRaw = urlParams['_rx_linker'];
-
-    // Basic size guard
-    if (linkerRaw.length < 4000) {
-      var decodedLinker = decode(linkerRaw);
-      var parsedLinker = JSON.parse(decodedLinker);
-
-      if (parsedLinker && typeof parsedLinker === 'object') {
-        if (parsedLinker.s && typeof parsedLinker.s === 'string') {
-          sessionId = parsedLinker.s;
-        }
-        if (parsedLinker.p && typeof parsedLinker.p === 'object') {
-          storedParams = parsedLinker.p;
-        }
+// Cross-domain receiver: extract _rx_linker directly from raw query to avoid
+// double-decode issues, then decode and parse with structural validation
+var rawQuery = getUrl('query') || '';
+var linkerEncoded = '';
+var rawPairs = rawQuery.split('&');
+for (var li = 0; li < rawPairs.length; li++) {
+  if (rawPairs[li].indexOf('_rx_linker=') === 0) {
+    linkerEncoded = rawPairs[li].split('=')[1];
+  }
+}
+if (linkerEncoded && linkerEncoded.length < 4000) {
+  var linkerDecoded = decode(linkerEncoded);
+  if (linkerDecoded.charAt(0) === '{' && linkerDecoded.charAt(linkerDecoded.length - 1) === '}') {
+    var parsedLinker = JSON.parse(linkerDecoded);
+    if (parsedLinker && typeof parsedLinker === 'object') {
+      if (parsedLinker.s && typeof parsedLinker.s === 'string') {
+        sessionId = parsedLinker.s;
+      }
+      if (parsedLinker.p && typeof parsedLinker.p === 'object') {
+        storedParams = parsedLinker.p;
       }
     }
-  } catch (e) {
-    // swallow to avoid breaking tag
   }
 }
 
 if (!sessionId) {
-  sessionId = randomSessionId();
+  sessionId = randomId();
 }
 setCookie(COOKIE.SESSION, sessionId, COOKIE_OPTIONS.session);
 
 var UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
-
 for (var i = 0; i < UTM_KEYS.length; i++) {
   var key = UTM_KEYS[i];
   if (urlParams[key]) {
@@ -370,14 +366,16 @@ for (var i = 0; i < UTM_KEYS.length; i++) {
   }
 }
 
-// Store params cookie with encoded values
 setCookie(COOKIE.PARAMS, buildCookieQuery(storedParams), COOKIE_OPTIONS.params);
 var utm = storedParams;
+
+// Use provided unique ID, or auto-generate one
+var roadtripUniqueId = data.roadtrip_unique_id || randomId();
 
 var postData = {
   type: data.type,
   roadtripClientUuid: data.roadtrip_client_uuid,
-  roadtripUniqueId: data.roadtrip_unique_id,
+  roadtripUniqueId: roadtripUniqueId,
   atsJobId: data.ats_job_id,
   atsJobTitle: data.ats_job_title,
   atsApplicationId: data.ats_application_id,
@@ -408,18 +406,13 @@ for (var jKey in jobVariables) {
 
 var pixelUrl = 'https://muuh.roadtrip.agency/api/v2/apply?' + buildQuery(postData);
 
-// Pixel is primary success signal (script is best-effort)
 sendPixel(
   pixelUrl,
-  function() {
-    data.gtmOnSuccess();
-  },
-  function() {
-    data.gtmOnFailure();
-  }
+  function() { data.gtmOnSuccess(); },
+  function() { data.gtmOnFailure(); }
 );
 
-// Cross-domain sender logic
+// Cross-domain sender
 var linkedDomainsStr = data.linked_domains || 'auto';
 var domains = [];
 if (linkedDomainsStr === 'auto') {
@@ -445,16 +438,8 @@ setInWindow(
   true
 );
 
-const linkerScriptUrl =
-  'https://persistexplorer.ams3.cdn.digitaloceanspaces.com/rx-linker.js';
-
-// Best-effort injection, not controlling tag success/failure
-injectScript(
-  linkerScriptUrl,
-  function() {},
-  function() {},
-  'rxLinkerScript'
-);
+const linkerScriptUrl = 'https://persistexplorer.ams3.cdn.digitaloceanspaces.com/rx-linker.js';
+injectScript(linkerScriptUrl, function() {}, function() {}, 'rxLinkerScript');
 
 
 ___WEB_PERMISSIONS___
@@ -834,16 +819,16 @@ scenarios:
     mock('setCookie', function(name, value, opts) {
       if (name === 'rx_session') { sessionValue = value; }
     });
-    mock('sendPixel', function(url) {});
+    mock('sendPixel', function(url, onSuccess, onFailure) { onSuccess(); });
     mock('readTitle', function() { return 'Test Page'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(sessionValue).isNotEqualTo('');
 
-- name: 'Session Management - Session ID matches XXXXXXXXXXXXXX format'
+- name: 'Session Management - Session ID matches XXXXXXX-XXXXXXX format'
   code: |
     var mockData = {
       type: 'job_detail_view',
@@ -857,7 +842,7 @@ scenarios:
       return 'https://example.com/jobs';
     });
     var callCount = 0;
-    var generatedValues = [1234567, 9876543];
+    var generatedValues = [1234567, 9876543, 1111111, 2222222];
     mock('generateRandom', function(min, max) {
       var val = generatedValues[callCount];
       callCount = callCount + 1;
@@ -867,11 +852,11 @@ scenarios:
     mock('setCookie', function(name, value, opts) {
       if (name === 'rx_session') { sessionValue = value; }
     });
-    mock('sendPixel', function(url) {});
+    mock('sendPixel', function(url, onSuccess, onFailure) { onSuccess(); });
     mock('readTitle', function() { return 'Test Page'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(sessionValue).isEqualTo('1234567.9876543');
@@ -898,11 +883,11 @@ scenarios:
     mock('setCookie', function(name, value, opts) {
       if (name === 'rx_session') { sessionValue = value; }
     });
-    mock('sendPixel', function(url) {});
+    mock('sendPixel', function(url, onSuccess, onFailure) { onSuccess(); });
     mock('readTitle', function() { return 'Test Page'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(sessionValue).isEqualTo(existingSession);
@@ -925,11 +910,11 @@ scenarios:
     mock('setCookie', function(name, value, opts) {
       if (name === 'rx_session') { sessionMaxAge = opts['max-age']; }
     });
-    mock('sendPixel', function(url) {});
+    mock('sendPixel', function(url, onSuccess, onFailure) { onSuccess(); });
     mock('readTitle', function() { return 'Test Page'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(sessionMaxAge).isEqualTo(1800);
@@ -956,11 +941,11 @@ scenarios:
         sessionSamesite = opts.samesite;
       }
     });
-    mock('sendPixel', function(url) {});
+    mock('sendPixel', function(url, onSuccess, onFailure) { onSuccess(); });
     mock('readTitle', function() { return 'Test Page'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(sessionSecure).isEqualTo(true);
@@ -986,12 +971,11 @@ scenarios:
     mock('setCookie', function(name, value, opts) {
       if (name === 'rx_session') { sessionValue = value; }
     });
-    var pixelUrl = '';
-    mock('sendPixel', function(url) { pixelUrl = url; });
+    mock('sendPixel', function(url, onSuccess, onFailure) { onSuccess(); });
     mock('readTitle', function() { return 'Test Page'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(sessionValue).isEqualTo(restoredSession);
@@ -1013,11 +997,11 @@ scenarios:
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
     var pixelUrl = '';
-    mock('sendPixel', function(url) { pixelUrl = url; });
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
     mock('readTitle', function() { return 'Test Page'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(pixelUrl).contains('utmSource=linkedin');
@@ -1040,11 +1024,11 @@ scenarios:
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
     var pixelFired = false;
-    mock('sendPixel', function(url) { pixelFired = true; });
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelFired = true; onSuccess(); });
     mock('readTitle', function() { return 'Test Page'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(pixelFired).isEqualTo(true);
@@ -1065,11 +1049,11 @@ scenarios:
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
     var pixelUrl = '';
-    mock('sendPixel', function(url) { pixelUrl = url; });
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
     mock('readTitle', function() { return 'Test'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(pixelUrl).contains('utmSource=google');
@@ -1097,11 +1081,11 @@ scenarios:
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
     var pixelUrl = '';
-    mock('sendPixel', function(url) { pixelUrl = url; });
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
     mock('readTitle', function() { return 'Apply Complete'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(pixelUrl).contains('utmSource=linkedin');
@@ -1126,11 +1110,11 @@ scenarios:
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
     var pixelUrl = '';
-    mock('sendPixel', function(url) { pixelUrl = url; });
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
     mock('readTitle', function() { return 'Jobs'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(pixelUrl).contains('utmSource=new_source');
@@ -1156,11 +1140,11 @@ scenarios:
     mock('setCookie', function(name, value, opts) {
       if (name === 'rx_params') { paramsCookieValue = value; }
     });
-    mock('sendPixel', function(url) {});
+    mock('sendPixel', function(url, onSuccess, onFailure) { onSuccess(); });
     mock('readTitle', function() { return 'Jobs'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(paramsCookieValue.indexOf('job_id')).isEqualTo(-1);
@@ -1183,11 +1167,11 @@ scenarios:
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
     var pixelUrl = '';
-    mock('sendPixel', function(url) { pixelUrl = url; });
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
     mock('readTitle', function() { return 'Jobs'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(pixelUrl).contains('utmSource=google');
@@ -1211,11 +1195,11 @@ scenarios:
     mock('setCookie', function(name, value, opts) {
       if (name === 'rx_params') { paramsMaxAge = opts['max-age']; }
     });
-    mock('sendPixel', function(url) {});
+    mock('sendPixel', function(url, onSuccess, onFailure) { onSuccess(); });
     mock('readTitle', function() { return 'Jobs'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(paramsMaxAge).isEqualTo(7776000);
@@ -1239,11 +1223,11 @@ scenarios:
     mock('setCookie', function(name, value, opts) {
       if (name === 'rx_params') { paramsMaxAge = opts['max-age']; }
     });
-    mock('sendPixel', function(url) {});
+    mock('sendPixel', function(url, onSuccess, onFailure) { onSuccess(); });
     mock('readTitle', function() { return 'Jobs'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(paramsMaxAge).isEqualTo(2592000);
@@ -1269,11 +1253,11 @@ scenarios:
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
     var pixelUrl = '';
-    mock('sendPixel', function(url) { pixelUrl = url; });
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
     mock('readTitle', function() { return 'Jobs'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(pixelUrl).contains('linkedInId=li_fat_abc123');
@@ -1296,11 +1280,11 @@ scenarios:
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
     var pixelUrl = '';
-    mock('sendPixel', function(url) { pixelUrl = url; });
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
     mock('readTitle', function() { return 'Apply Done'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(pixelUrl).contains('https://muuh.roadtrip.agency/api/v2/apply?');
@@ -1328,11 +1312,11 @@ scenarios:
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
     var pixelUrl = '';
-    mock('sendPixel', function(url) { pixelUrl = url; });
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
     mock('readTitle', function() { return 'Apply Page'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return 'https://example.com/jobs'; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(pixelUrl).contains('type=apply_start');
@@ -1366,11 +1350,11 @@ scenarios:
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
     var pixelUrl = '';
-    mock('sendPixel', function(url) { pixelUrl = url; });
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
     mock('readTitle', function() { return 'Jobs'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(pixelUrl).contains('atsJobTitle=');
@@ -1392,14 +1376,66 @@ scenarios:
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
     var pixelUrl = '';
-    mock('sendPixel', function(url) { pixelUrl = url; });
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
     mock('readTitle', function() { return 'Jobs'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(pixelUrl).contains('clientApplicationTimestamp=1700000000000');
+
+- name: 'Roadtrip Unique ID - auto-generated when field is empty'
+  code: |
+    var mockData = {
+      type: 'job_detail_view',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    mock('getCookieValues', function(name) { return []; });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/jobs';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Jobs'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    runCode(mockData);
+    assertThat(pixelUrl).contains('roadtripUniqueId=');
+    assertThat(pixelUrl.indexOf('roadtripUniqueId=&')).isEqualTo(-1);
+
+- name: 'Roadtrip Unique ID - explicit value is passed through unchanged'
+  code: |
+    var mockData = {
+      type: 'job_detail_view',
+      roadtrip_client_uuid: 'test-uuid',
+      roadtrip_unique_id: 'my-explicit-id',
+      linked_domains: 'auto'
+    };
+    mock('getCookieValues', function(name) { return []; });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/jobs';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Jobs'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    runCode(mockData);
+    assertThat(pixelUrl).contains('roadtripUniqueId=my-explicit-id');
 
 - name: 'Job Variable Table - Single job variable is passed in pixel'
   code: |
@@ -1420,11 +1456,11 @@ scenarios:
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
     var pixelUrl = '';
-    mock('sendPixel', function(url) { pixelUrl = url; });
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
     mock('readTitle', function() { return 'Job Detail'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(pixelUrl).contains('job_location=Amsterdam');
@@ -1450,11 +1486,11 @@ scenarios:
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
     var pixelUrl = '';
-    mock('sendPixel', function(url) { pixelUrl = url; });
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
     mock('readTitle', function() { return 'Job Detail'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(pixelUrl).contains('job_location=Amsterdam');
@@ -1478,11 +1514,11 @@ scenarios:
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
     var pixelFired = false;
-    mock('sendPixel', function(url) { pixelFired = true; });
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelFired = true; onSuccess(); });
     mock('readTitle', function() { return 'Jobs'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(pixelFired).isEqualTo(true);
@@ -1503,11 +1539,11 @@ scenarios:
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
     var pixelFired = false;
-    mock('sendPixel', function(url) { pixelFired = true; });
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelFired = true; onSuccess(); });
     mock('readTitle', function() { return 'Jobs'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(pixelFired).isEqualTo(true);
@@ -1527,11 +1563,11 @@ scenarios:
     });
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
-    mock('sendPixel', function(url) {});
+    mock('sendPixel', function(url, onSuccess, onFailure) { onSuccess(); });
     mock('readTitle', function() { return 'Jobs'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     var windowConfig = null;
     mock('setInWindow', function(key, value, override) {
       if (key === '_rxConfig') { windowConfig = value; }
@@ -1556,11 +1592,11 @@ scenarios:
     });
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
-    mock('sendPixel', function(url) {});
+    mock('sendPixel', function(url, onSuccess, onFailure) { onSuccess(); });
     mock('readTitle', function() { return 'Jobs'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     var windowConfig = null;
     mock('setInWindow', function(key, value) {
       if (key === '_rxConfig') { windowConfig = value; }
@@ -1583,11 +1619,11 @@ scenarios:
     });
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
-    mock('sendPixel', function(url) {});
+    mock('sendPixel', function(url, onSuccess, onFailure) { onSuccess(); });
     mock('readTitle', function() { return 'Jobs'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     var windowConfig = null;
     mock('setInWindow', function(key, value) {
       if (key === '_rxConfig') { windowConfig = value; }
@@ -1613,7 +1649,7 @@ scenarios:
     });
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
-    mock('sendPixel', function(url) {});
+    mock('sendPixel', function(url, onSuccess, onFailure) { onSuccess(); });
     mock('readTitle', function() { return 'Jobs'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
@@ -1621,7 +1657,6 @@ scenarios:
     var injectedUrl = '';
     mock('injectScript', function(url, onSuccess, onFailure, cacheKey) {
       injectedUrl = url;
-      onSuccess();
     });
     runCode(mockData);
     assertThat(injectedUrl).isEqualTo('https://persistexplorer.ams3.cdn.digitaloceanspaces.com/rx-linker.js');
@@ -1642,11 +1677,11 @@ scenarios:
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
     var pixelUrl = '';
-    mock('sendPixel', function(url) { pixelUrl = url; });
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
     mock('readTitle', function() { return 'Done'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(pixelUrl).contains('type=apply_complete');
@@ -1667,11 +1702,11 @@ scenarios:
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
     var pixelUrl = '';
-    mock('sendPixel', function(url) { pixelUrl = url; });
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
     mock('readTitle', function() { return 'Job'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(pixelUrl).contains('type=job_detail_view');
@@ -1692,11 +1727,11 @@ scenarios:
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
     var pixelUrl = '';
-    mock('sendPixel', function(url) { pixelUrl = url; });
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
     mock('readTitle', function() { return 'Apply'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(pixelUrl).contains('type=apply_start');
@@ -1717,11 +1752,11 @@ scenarios:
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
     var pixelFired = false;
-    mock('sendPixel', function(url) { pixelFired = true; });
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelFired = true; onSuccess(); });
     mock('readTitle', function() { return 'Jobs'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(pixelFired).isEqualTo(true);
@@ -1742,17 +1777,17 @@ scenarios:
     mock('generateRandom', function() { return 1234567; });
     mock('setCookie', function(name, value, opts) {});
     var pixelUrl = '';
-    mock('sendPixel', function(url) { pixelUrl = url; });
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
     mock('readTitle', function() { return 'Jobs'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(pixelUrl).contains('utmMedium=cpc');
     assertThat(pixelUrl.indexOf('utmSource=undefined')).isEqualTo(-1);
 
-- name: 'Edge Cases - buildRawQuery special chars bug - ampersand in UTM corrupts cookie'
+- name: 'Edge Cases - Ampersand in UTM value is encoded correctly in cookie'
   code: |
     var mockData = {
       type: 'job_detail_view',
@@ -1770,11 +1805,11 @@ scenarios:
     mock('setCookie', function(name, value, opts) {
       if (name === 'rx_params') { paramsCookieValue = value; }
     });
-    mock('sendPixel', function(url) {});
+    mock('sendPixel', function(url, onSuccess, onFailure) { onSuccess(); });
     mock('readTitle', function() { return 'Jobs'; });
     mock('getTimestamp', function() { return 1700000000000; });
     mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess) { onSuccess(); });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(paramsCookieValue).contains('utm_campaign=jobs%26promotions');
