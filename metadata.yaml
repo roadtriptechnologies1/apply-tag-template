@@ -2,8 +2,8 @@ homepage: "https://www.roadtrip.agency"
 documentation: "https://muuh.roadtrip.agency"
 versions:
   # Latest version
-  - sha: d534dda057f4a962b5d861616318a679f96d3a2f
-    changeNotes: Add functionality for cross-domain
+  - sha: faec66d58675d1ff286036a874b68a84463d7267
+    changeNotes: Add functionality for cross-domain and generate unique id in code
   # Older versions
   - sha: 355811e95f16c39e0e22df9c1963dd7cceadbb4c
     changeNotes: Add job variables
