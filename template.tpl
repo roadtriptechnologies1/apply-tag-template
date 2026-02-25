@@ -358,11 +358,31 @@ if (!sessionId) {
 }
 setCookie(COOKIE.SESSION, sessionId, COOKIE_OPTIONS.session);
 
+// Apply gclid logic for the current URL
+if (urlParams.gclid) {
+  urlParams.utm_source = 'google';
+  urlParams.utm_medium = 'cpc';
+}
+
+// Extract and parse referrer query parameters
+var rawReferrer = getReferrerUrl() || '';
+var referrerQuery = rawReferrer.indexOf('?') > -1 ? rawReferrer.split('?')[1] : '';
+var referrerParams = parseQuery(referrerQuery);
+
+// Apply gclid logic for the referrer
+if (referrerParams.gclid) {
+  referrerParams.utm_source = 'google';
+  referrerParams.utm_medium = 'cpc';
+}
+
+// Extract UTMs hierarchically (Current URL > Referrer URL > Stored)
 var UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
 for (var i = 0; i < UTM_KEYS.length; i++) {
   var key = UTM_KEYS[i];
   if (urlParams[key]) {
     storedParams[key] = urlParams[key];
+  } else if (referrerParams[key]) {
+    storedParams[key] = referrerParams[key];
   }
 }
 
@@ -394,7 +414,7 @@ var postData = {
   sessionId: sessionId,
   currentUrl: currentUrl,
   pageTitle: readTitle(),
-  referrer: getReferrerUrl()
+  referrer: rawReferrer
 };
 
 var jobVariables = normalizeJobVariables(data.job_variable_table);
@@ -1814,7 +1834,85 @@ scenarios:
     runCode(mockData);
     assertThat(paramsCookieValue).contains('utm_campaign=jobs%26promotions');
 
+- name: 'UTM Parameters - Extracted from referrer when missing from current URL'
+  code: |
+    var mockData = {
+      type: 'job_detail_view',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    mock('getCookieValues', function(name) { return []; });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/jobs';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Test'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return 'https://othersite.com/?utm_source=newsletter&utm_medium=email'; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    runCode(mockData);
+    assertThat(pixelUrl).contains('utmSource=newsletter');
+    assertThat(pixelUrl).contains('utmMedium=email');
+
+- name: 'UTM Parameters - gclid in referrer forces google/cpc'
+  code: |
+    var mockData = {
+      type: 'job_detail_view',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    mock('getCookieValues', function(name) { return []; });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/jobs';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Test'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return 'https://google.com/?gclid=TestGclid123'; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    runCode(mockData);
+    assertThat(pixelUrl).contains('utmSource=google');
+    assertThat(pixelUrl).contains('utmMedium=cpc');
+
+- name: 'UTM Parameters - Current URL overrides referrer UTMs'
+  code: |
+    var mockData = {
+      type: 'job_detail_view',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    mock('getCookieValues', function(name) { return []; });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return 'utm_source=facebook&utm_medium=social'; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/jobs';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Test'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return 'https://othersite.com/?utm_source=newsletter&utm_medium=email'; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    runCode(mockData);
+    assertThat(pixelUrl).contains('utmSource=facebook');
+    assertThat(pixelUrl).contains('utmMedium=social');
+    assertThat(pixelUrl.indexOf('utmSource=newsletter')).isEqualTo(-1);
 
 ___NOTES___
 
-Created on 2/19/2026, 11:35:00 AM
+Created on 2/25/2026, 11:01:43 AM
