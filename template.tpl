@@ -340,6 +340,10 @@ for (var li = 0; li < rawPairs.length; li++) {
 }
 if (linkerEncoded && linkerEncoded.length < 4000) {
   var linkerDecoded = decode(linkerEncoded);
+  // Check if the string was double-encoded (starts with %7B after the first decode)
+  if (linkerDecoded.indexOf('%7B') === 0) {
+    linkerDecoded = decode(linkerDecoded);
+  }
   if (linkerDecoded.charAt(0) === '{' && linkerDecoded.charAt(linkerDecoded.length - 1) === '}') {
     var parsedLinker = JSON.parse(linkerDecoded);
     if (parsedLinker && typeof parsedLinker === 'object') {
@@ -453,7 +457,7 @@ setInWindow(
   '_rxConfig',
   {
     domains: domains,
-    payload: encode(JSON.stringify(linkerPayload))
+    payload: JSON.stringify(linkerPayload)
   },
   true
 );
@@ -1027,6 +1031,35 @@ scenarios:
     assertThat(pixelUrl).contains('utmSource=linkedin');
     assertThat(pixelUrl).contains('utmMedium=social');
     assertThat(pixelUrl).contains('utmCampaign=hiring2024');
+
+- name: 'Cross-Domain Receiver - Handles double-encoded linker param'
+  code: |
+    var mockData = {
+      type: 'job_detail_view',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    var restoredSession = '8227394.8947614';
+    var doubleEncodedLinker = '%257B%2522s%2522%253A%25228227394.8947614%2522%252C%2522p%2522%253A%257B%2522utm_source%2522%253A%2522testSource%2522%252C%2522utm_medium%2522%253A%2522testMedium%2522%257D%257D';
+    mock('getCookieValues', function(name) { return []; });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return '_rx_linker=' + doubleEncodedLinker; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/jobs';
+    });
+    mock('generateRandom', function() { return 9999999; });
+    var sessionValue = '';
+    mock('setCookie', function(name, value, opts) {
+      if (name === 'rx_session') { sessionValue = value; }
+    });
+    mock('sendPixel', function(url, onSuccess, onFailure) { onSuccess(); });
+    mock('readTitle', function() { return 'Test Page'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    runCode(mockData);
+    assertThat(sessionValue).isEqualTo(restoredSession);
 
 - name: 'Cross-Domain Receiver - Absent linker param does not break flow'
   code: |
