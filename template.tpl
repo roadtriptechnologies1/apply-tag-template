@@ -90,18 +90,6 @@ ___TEMPLATE_PARAMETERS___
   },
   {
     "type": "TEXT",
-    "name": "google_client_id",
-    "displayName": "Google Client ID",
-    "simpleValueType": true
-  },
-  {
-    "type": "TEXT",
-    "name": "google_session_id",
-    "displayName": "Google Session ID",
-    "simpleValueType": true
-  },
-  {
-    "type": "TEXT",
     "name": "jobmatrix_id",
     "displayName": "Jobmatrix ID",
     "simpleValueType": true
@@ -403,8 +391,6 @@ var postData = {
   atsJobId: data.ats_job_id,
   atsJobTitle: data.ats_job_title,
   atsApplicationId: data.ats_application_id,
-  googleClientId: data.google_client_id,
-  googleSessionId: data.google_session_id,
   facebookId: cookies.facebook,
   linkedInId: cookies.linkedin,
   googleAdsGclid: cookies.googleAds,
@@ -1351,8 +1337,6 @@ scenarios:
       ats_job_id: 'job-456',
       ats_job_title: 'Software Engineer',
       ats_application_id: 'app-789',
-      google_client_id: 'GA1',
-      google_session_id: 'session-ga4',
       jobmatrix_id: 'jm-001',
       linked_domains: 'auto'
     };
@@ -1377,8 +1361,6 @@ scenarios:
     assertThat(pixelUrl).contains('roadtripUniqueId=unique-001');
     assertThat(pixelUrl).contains('atsJobId=job-456');
     assertThat(pixelUrl).contains('atsApplicationId=app-789');
-    assertThat(pixelUrl).contains('googleClientId=GA1');
-    assertThat(pixelUrl).contains('googleSessionId=session-ga4');
     assertThat(pixelUrl).contains('jobmatrixId=jm-001');
     assertThat(pixelUrl).contains('sessionId=');
     assertThat(pixelUrl).contains('currentUrl=');
