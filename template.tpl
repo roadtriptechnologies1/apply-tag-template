@@ -65,13 +65,6 @@ ___TEMPLATE_PARAMETERS___
   },
   {
     "type": "TEXT",
-    "name": "roadtrip_unique_id",
-    "displayName": "Roadtrip Unique ID (optional)",
-    "help": "Leave empty to auto-generate a unique ID per event. Only set this if you need to supply your own identifier and you're really sure.",
-    "simpleValueType": true
-  },
-  {
-    "type": "TEXT",
     "name": "ats_job_id",
     "displayName": "ATS Job ID",
     "simpleValueType": true
@@ -381,8 +374,8 @@ for (var i = 0; i < UTM_KEYS.length; i++) {
 setCookie(COOKIE.PARAMS, buildCookieQuery(storedParams), COOKIE_OPTIONS.params);
 var utm = storedParams;
 
-// Use provided unique ID, or auto-generate one
-var roadtripUniqueId = data.roadtrip_unique_id || randomId();
+// Auto-generate a unique ID per event
+var roadtripUniqueId = randomId();
 
 var postData = {
   type: data.type,
@@ -1333,7 +1326,6 @@ scenarios:
     var mockData = {
       type: 'apply_start',
       roadtrip_client_uuid: 'client-uuid-001',
-      roadtrip_unique_id: 'unique-001',
       ats_job_id: 'job-456',
       ats_job_title: 'Software Engineer',
       ats_application_id: 'app-789',
@@ -1358,7 +1350,8 @@ scenarios:
     runCode(mockData);
     assertThat(pixelUrl).contains('type=apply_start');
     assertThat(pixelUrl).contains('roadtripClientUuid=client-uuid-001');
-    assertThat(pixelUrl).contains('roadtripUniqueId=unique-001');
+    assertThat(pixelUrl).contains('roadtripUniqueId=');
+    assertThat(pixelUrl.indexOf('roadtripUniqueId=&')).isEqualTo(-1);
     assertThat(pixelUrl).contains('atsJobId=job-456');
     assertThat(pixelUrl).contains('atsApplicationId=app-789');
     assertThat(pixelUrl).contains('jobmatrixId=jm-001');
@@ -1424,7 +1417,6 @@ scenarios:
   code: |
     var mockData = {
       type: 'job_detail_view',
-      roadtrip_client_uuid: 'test-uuid',
       linked_domains: 'auto'
     };
     mock('getCookieValues', function(name) { return []; });
@@ -1445,32 +1437,6 @@ scenarios:
     runCode(mockData);
     assertThat(pixelUrl).contains('roadtripUniqueId=');
     assertThat(pixelUrl.indexOf('roadtripUniqueId=&')).isEqualTo(-1);
-
-- name: 'Roadtrip Unique ID - explicit value is passed through unchanged'
-  code: |
-    var mockData = {
-      type: 'job_detail_view',
-      roadtrip_client_uuid: 'test-uuid',
-      roadtrip_unique_id: 'my-explicit-id',
-      linked_domains: 'auto'
-    };
-    mock('getCookieValues', function(name) { return []; });
-    mock('getUrl', function(part) {
-      if (part === 'query') { return ''; }
-      if (part === 'host') { return 'example.com'; }
-      return 'https://example.com/jobs';
-    });
-    mock('generateRandom', function() { return 1234567; });
-    mock('setCookie', function(name, value, opts) {});
-    var pixelUrl = '';
-    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
-    mock('readTitle', function() { return 'Jobs'; });
-    mock('getTimestamp', function() { return 1700000000000; });
-    mock('getReferrerUrl', function() { return ''; });
-    mock('injectScript', function(url, onSuccess, onFailure, key) {});
-    mock('setInWindow', function() {});
-    runCode(mockData);
-    assertThat(pixelUrl).contains('roadtripUniqueId=my-explicit-id');
 
 - name: 'Job Variable Table - Single job variable is passed in pixel'
   code: |
