@@ -2,9 +2,11 @@ homepage: "https://www.roadtrip.agency"
 documentation: "https://muuh.roadtrip.agency"
 versions:
   # Latest version
+  - sha: 0976ab77b60eb39d605769ce8179e4e76a00cd96
+    changeNotes: Remove user generated unique id
+  # Older versions
   - sha: b5dac7837a14a8056f78a8221fdbe052ecb5812e
     changeNotes: Remove google client and session id
-  # Older versions
   - sha: 1389097baeadf6786e7e87b63e5806b489f37ee7
     changeNotes: Fix double encoded linker
   - sha: b9e5e1939e6de79808a9d987540d932d1810f644
