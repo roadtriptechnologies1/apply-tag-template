@@ -217,6 +217,8 @@ const getReferrerUrl = require('getReferrerUrl');
 const injectScript = require('injectScript');
 const setInWindow = require('setInWindow');
 const JSON = require('JSON');
+const toBase64 = require('toBase64');
+const fromBase64 = require('fromBase64');
 
 const currentUrl = getUrl();
 var urlParamsStorageDurationDays = data.url_params_storage_duration_days;
@@ -285,6 +287,21 @@ function randomId() {
   return generateRandom(1000000, 9999999) + '.' + generateRandom(1000000, 9999999);
 }
 
+function base64UrlEncode(str) {
+  var b64 = toBase64(str);
+  if (!b64) return '';
+  return b64.split('+').join('-').split('/').join('_').split('=').join('');
+}
+
+function base64UrlDecode(str) {
+  if (!str) return '';
+  var b64 = str.split('-').join('+').split('_').join('/');
+  while (b64.length % 4 !== 0) {
+    b64 = b64 + '=';
+  }
+  return fromBase64(b64);
+}
+
 function normalizeJobVariables(table) {
   var result = {};
   if (!table || !table.length) return result;
@@ -319,13 +336,16 @@ for (var li = 0; li < rawPairs.length; li++) {
     linkerEncoded = rawPairs[li].split('=')[1];
   }
 }
+
 if (linkerEncoded && linkerEncoded.length < 4000) {
-  var linkerDecoded = decode(linkerEncoded);
-  // Check if the string was double-encoded (starts with %7B after the first decode)
-  if (linkerDecoded.indexOf('%7B') === 0) {
-    linkerDecoded = decode(linkerDecoded);
-  }
-  if (linkerDecoded.charAt(0) === '{' && linkerDecoded.charAt(linkerDecoded.length - 1) === '}') {
+  // _rx_linker arrives percent-encoded in the query; strip that layer first,
+  // then base64url-decode to recover the JSON payload. base64url contains no
+  // characters that require percent- or HTML-encoding, so the value survives
+  // cross-domain hops byte-for-byte (no quotes for a parser to mangle).
+  var linkerB64 = decode(linkerEncoded);
+  var linkerDecoded = base64UrlDecode(linkerB64);
+  if (linkerDecoded && linkerDecoded.charAt(0) === '{' &&
+      linkerDecoded.charAt(linkerDecoded.length - 1) === '}') {
     var parsedLinker = JSON.parse(linkerDecoded);
     if (parsedLinker && typeof parsedLinker === 'object') {
       if (parsedLinker.s && typeof parsedLinker.s === 'string') {
@@ -436,7 +456,7 @@ setInWindow(
   '_rxConfig',
   {
     domains: domains,
-    payload: JSON.stringify(linkerPayload)
+    payload: base64UrlEncode(JSON.stringify(linkerPayload))
   },
   true
 );
@@ -962,7 +982,7 @@ scenarios:
       linked_domains: 'auto'
     };
     var restoredSession = '5555555.6666666';
-    var encodedLinker = '%7B%22s%22%3A%225555555.6666666%22%2C%22p%22%3A%7B%7D%7D';
+    var encodedLinker = 'eyJzIjoiNTU1NTU1NS42NjY2NjY2IiwicCI6e319';
     mock('getCookieValues', function(name) { return []; });
     mock('getUrl', function(part) {
       if (part === 'query') { return '_rx_linker=' + encodedLinker; }
@@ -990,7 +1010,7 @@ scenarios:
       roadtrip_client_uuid: 'test-uuid',
       linked_domains: 'auto'
     };
-    var encodedLinker = '%7B%22s%22%3A%221234567.8901234%22%2C%22p%22%3A%7B%22utm_source%22%3A%22linkedin%22%2C%22utm_medium%22%3A%22social%22%2C%22utm_campaign%22%3A%22hiring2024%22%7D%7D';
+    var encodedLinker = 'eyJzIjoiMTIzNDU2Ny44OTAxMjM0IiwicCI6eyJ1dG1fc291cmNlIjoibGlua2VkaW4iLCJ1dG1fbWVkaXVtIjoic29jaWFsIiwidXRtX2NhbXBhaWduIjoiaGlyaW5nMjAyNCJ9fQ';
     mock('getCookieValues', function(name) { return []; });
     mock('getUrl', function(part) {
       if (part === 'query') { return '_rx_linker=' + encodedLinker; }
@@ -1011,7 +1031,7 @@ scenarios:
     assertThat(pixelUrl).contains('utmMedium=social');
     assertThat(pixelUrl).contains('utmCampaign=hiring2024');
 
-- name: 'Cross-Domain Receiver - Handles double-encoded linker param'
+- name: 'Cross-Domain Receiver - Decodes base64url linker param with UTMs'
   code: |
     var mockData = {
       type: 'job_detail_view',
@@ -1019,10 +1039,10 @@ scenarios:
       linked_domains: 'auto'
     };
     var restoredSession = '8227394.8947614';
-    var doubleEncodedLinker = '%257B%2522s%2522%253A%25228227394.8947614%2522%252C%2522p%2522%253A%257B%2522utm_source%2522%253A%2522testSource%2522%252C%2522utm_medium%2522%253A%2522testMedium%2522%257D%257D';
+    var base64UrlLinker = 'eyJzIjoiODIyNzM5NC44OTQ3NjE0IiwicCI6eyJ1dG1fc291cmNlIjoidGVzdFNvdXJjZSIsInV0bV9tZWRpdW0iOiJ0ZXN0TWVkaXVtIn19';
     mock('getCookieValues', function(name) { return []; });
     mock('getUrl', function(part) {
-      if (part === 'query') { return '_rx_linker=' + doubleEncodedLinker; }
+      if (part === 'query') { return '_rx_linker=' + base64UrlLinker; }
       if (part === 'host') { return 'example.com'; }
       return 'https://example.com/jobs';
     });
@@ -1039,6 +1059,41 @@ scenarios:
     mock('setInWindow', function() {});
     runCode(mockData);
     assertThat(sessionValue).isEqualTo(restoredSession);
+
+- name: 'Cross-Domain Sender - Payload is base64url encoded (no JSON chars)'
+  code: |
+    var mockData = {
+      type: 'job_detail_view',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    mock('getCookieValues', function(name) {
+      if (name === 'rx_params') { return ['utm_source=linkedin&utm_medium=social']; }
+      return [];
+    });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/jobs';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    mock('sendPixel', function(url, onSuccess, onFailure) { onSuccess(); });
+    mock('readTitle', function() { return 'Jobs'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    var windowConfig = null;
+    mock('setInWindow', function(key, value, override) {
+      if (key === '_rxConfig') { windowConfig = value; }
+    });
+    runCode(mockData);
+    assertThat(windowConfig.payload).isNotNull();
+    assertThat(windowConfig.payload.indexOf('{')).isEqualTo(-1);
+    assertThat(windowConfig.payload.indexOf('"')).isEqualTo(-1);
+    assertThat(windowConfig.payload.indexOf('+')).isEqualTo(-1);
+    assertThat(windowConfig.payload.indexOf('/')).isEqualTo(-1);
+    assertThat(windowConfig.payload.indexOf('=')).isEqualTo(-1);
 
 - name: 'Cross-Domain Receiver - Absent linker param does not break flow'
   code: |
