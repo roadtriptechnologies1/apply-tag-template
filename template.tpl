@@ -381,7 +381,17 @@ if (referrerParams.gclid) {
 }
 
 // Extract UTMs hierarchically (Current URL > Referrer URL > Stored)
+// A new utm_source signals a new campaign touch: clear ALL stored UTM keys
+// first so stale values from a previous touch can't combine with the new
+// source into a pair that never existed on any real link.
 var UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+
+if (urlParams.utm_source || referrerParams.utm_source) {
+  for (var c = 0; c < UTM_KEYS.length; c++) {
+    delete storedParams[UTM_KEYS[c]];
+  }
+}
+
 for (var i = 0; i < UTM_KEYS.length; i++) {
   var key = UTM_KEYS[i];
   if (urlParams[key]) {
@@ -1991,6 +2001,40 @@ scenarios:
     mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
     runCode(mockData);
     assertThat(pixelUrl).contains('utmCampaign=caf');
+
+- name: 'UTM Parameters - New utm_source clears all stale stored UTM keys'
+  code: |
+    var mockData = {
+      type: 'job_detail_view',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    mock('getCookieValues', function(name) {
+      if (name === 'rx_params') { return ['utm_source=tzorg&utm_medium=algemeen_hamburger&utm_campaign=oud']; }
+      return [];
+    });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return 'utm_source=bijbaan_nl'; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/jobs';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    var paramsCookieValue = '';
+    mock('setCookie', function(name, value, opts) {
+      if (name === 'rx_params') { paramsCookieValue = value; }
+    });
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Jobs'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return 'https://www.bijbaan.nl/'; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    runCode(mockData);
+    assertThat(pixelUrl).contains('utmSource=bijbaan_nl');
+    assertThat(pixelUrl.indexOf('utmMedium=algemeen_hamburger')).isEqualTo(-1);
+    assertThat(pixelUrl.indexOf('utmCampaign=oud')).isEqualTo(-1);
+    assertThat(paramsCookieValue.indexOf('algemeen_hamburger')).isEqualTo(-1);
 
 ___NOTES___
 
