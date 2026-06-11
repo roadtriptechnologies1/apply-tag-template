@@ -2,9 +2,11 @@ homepage: "https://www.roadtrip.agency"
 documentation: "https://muuh.roadtrip.agency"
 versions:
   # Latest version
+  - sha: a55761bb7113e5a04509e6669a0d0c2fc3c23eb2
+    changeNotes: clear all UTMs if utm_source changes
+  # Older versions
   - sha: e366fcc72aea71d9d28a9e8dde59520917f240b0
     changeNotes: base64url-encode cross-domain linker payload to prevent HTML-escape/redirect-loop
-  # Older versions
   - sha: 0976ab77b60eb39d605769ce8179e4e76a00cd96
     changeNotes: Remove user generated unique id
   - sha: b5dac7837a14a8056f78a8221fdbe052ecb5812e
