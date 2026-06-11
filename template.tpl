@@ -1949,6 +1949,49 @@ scenarios:
     assertThat(pixelUrl).contains('utmMedium=social');
     assertThat(pixelUrl.indexOf('utmSource=newsletter')).isEqualTo(-1);
 
+- name: 'Cross-Domain Receiver - Unicode UTM value round-trips intact'
+  code: |
+    var mockData = {
+      type: 'job_detail_view',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    // Encode a payload with a non-ASCII campaign the way the sender would,
+    // by first running the sender to capture what it emits, then feeding it back.
+    var capturedPayload = '';
+    mock('getCookieValues', function(name) {
+      if (name === 'rx_params') { return ['utm_source=google&utm_campaign=caf%C3%A9_m%C3%BCnchen']; }
+      return [];
+    });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/jobs';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    mock('sendPixel', function(url, onSuccess, onFailure) { onSuccess(); });
+    mock('readTitle', function() { return 'Jobs'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function(key, value, override) {
+      if (key === '_rxConfig') { capturedPayload = value.payload; }
+    });
+    runCode(mockData);
+    // capturedPayload is what the sender base64url-encoded. Now feed it back as an inbound
+    // _rx_linker and confirm the receiver restores the unicode campaign into the pixel.
+    var pixelUrl = '';
+    mock('getCookieValues', function(name) { return []; });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return '_rx_linker=' + capturedPayload; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/jobs';
+    });
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    runCode(mockData);
+    assertThat(pixelUrl).contains('utmCampaign=caf');
+
 ___NOTES___
 
 Created on 2/25/2026, 11:01:43 AM
