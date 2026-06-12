@@ -2,7 +2,7 @@ homepage: "https://www.roadtrip.agency"
 documentation: "https://muuh.roadtrip.agency"
 versions:
   # Latest version
-  - sha: a55761bb7113e5a04509e6669a0d0c2fc3c23eb2
+  - sha: 9b572891a47fa6802c535883f5dbb951c01caf01
     changeNotes: clear all UTMs if utm_source changes
   # Older versions
   - sha: e366fcc72aea71d9d28a9e8dde59520917f240b0
