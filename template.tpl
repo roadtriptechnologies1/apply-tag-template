@@ -388,7 +388,7 @@ var UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_con
 
 if (urlParams.utm_source || referrerParams.utm_source) {
   for (var c = 0; c < UTM_KEYS.length; c++) {
-    delete storedParams[UTM_KEYS[c]];
+    storedParams[UTM_KEYS[c]] = undefined;
   }
 }
 
