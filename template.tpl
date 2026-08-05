@@ -499,7 +499,7 @@ ___WEB_PERMISSIONS___
             "listItem": [
               {
                 "type": 1,
-                "string": "https://muuh.roadtrip.agency/*"
+                "string": "https://events.explorerdash.com/*"
               }
             ]
           }
