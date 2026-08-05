@@ -437,7 +437,7 @@ for (var jKey in jobVariables) {
   }
 }
 
-var pixelUrl = 'https://muuh.roadtrip.agency/api/v2/apply?' + buildQuery(postData);
+var pixelUrl = 'https://events.explorerdash.com/?' + buildQuery(postData);
 
 sendPixel(
   pixelUrl,
@@ -1384,7 +1384,7 @@ scenarios:
     mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
-    assertThat(pixelUrl).contains('https://muuh.roadtrip.agency/api/v2/apply?');
+    assertThat(pixelUrl).contains('https://events.explorerdash.com/?');
 
 - name: 'Pixel Construction - All core fields present in pixel URL'
   code: |
