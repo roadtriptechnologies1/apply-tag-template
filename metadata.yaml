@@ -2,9 +2,11 @@ homepage: "https://www.roadtrip.agency"
 documentation: "https://muuh.roadtrip.agency"
 versions:
   # Latest version
+  - sha: 3f937f1a22a3875f27954b84cd649744da14f2e7
+    changeNotes: add search and job alert event type
+  # Older versions
   - sha: 9b5a04d560a4763a515364d62e6268440e5a0892
     changeNotes: change endpoint
-  # Older versions
   - sha: 9b572891a47fa6802c535883f5dbb951c01caf01
     changeNotes: clear all UTMs if utm_source changes
   - sha: e366fcc72aea71d9d28a9e8dde59520917f240b0
