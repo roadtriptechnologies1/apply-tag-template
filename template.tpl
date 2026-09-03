@@ -38,24 +38,24 @@ ___TEMPLATE_PARAMETERS___
     "displayName": "Type",
     "macrosInSelect": false,
     "selectItems": [
-      {
-        "value": "apply_complete",
-        "displayValue": "Apply Complete"
-      },
-      {
-        "value": "job_detail_view",
-        "displayValue": "Job Detail View"
-      },
-      {
-        "value": "apply_start",
-        "displayValue": "Apply Start"
-      },
-      {
-        "value": "other",
-        "displayValue": "Other"
-      }
+      { "value": "apply_complete",  "displayValue": "Apply Complete" },
+      { "value": "job_detail_view", "displayValue": "Job Detail View" },
+      { "value": "apply_start",     "displayValue": "Apply Start" },
+      { "value": "search",          "displayValue": "Search" },
+      { "value": "job_alert",       "displayValue": "Job Alert" },
+      { "value": "other",           "displayValue": "Other" }
     ],
     "simpleValueType": true
+  },
+  {
+    "type": "TEXT",
+    "name": "search_term",
+    "displayName": "Search Term",
+    "help": "The query the visitor searched for. Only sent on Search events.",
+    "simpleValueType": true,
+    "enablingConditions": [
+      { "paramName": "type", "paramValue": "search", "type": "EQUALS" }
+    ]
   },
   {
     "type": "TEXT",
@@ -429,6 +429,11 @@ var postData = {
   pageTitle: readTitle(),
   referrer: rawReferrer
 };
+
+// Search term is only meaningful on search events
+if (data.type === 'search' && data.search_term) {
+  postData.searchTerm = data.search_term;
+}
 
 var jobVariables = normalizeJobVariables(data.job_variable_table);
 for (var jKey in jobVariables) {
@@ -2035,6 +2040,116 @@ scenarios:
     assertThat(pixelUrl.indexOf('utmMedium=algemeen_hamburger')).isEqualTo(-1);
     assertThat(pixelUrl.indexOf('utmCampaign=oud')).isEqualTo(-1);
     assertThat(paramsCookieValue.indexOf('algemeen_hamburger')).isEqualTo(-1);
+
+- name: 'Event Types - search type passed with search term'
+  code: |
+    var mockData = {
+      type: 'search',
+      roadtrip_client_uuid: 'test-uuid',
+      search_term: 'software engineer',
+      linked_domains: 'auto'
+    };
+    mock('getCookieValues', function(name) { return []; });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/vacatures';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Search results'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    runCode(mockData);
+    assertThat(pixelUrl).contains('type=search');
+    assertThat(pixelUrl).contains('searchTerm=software%20engineer');
+
+- name: 'Event Types - job_alert type passed correctly in pixel'
+  code: |
+    var mockData = {
+      type: 'job_alert',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    mock('getCookieValues', function(name) { return []; });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/job-alert/confirm';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Job Alert'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    runCode(mockData);
+    assertThat(pixelUrl).contains('type=job_alert');
+    assertThat(pixelUrl.indexOf('searchTerm=')).isEqualTo(-1);
+
+- name: 'Search Term - not sent on non-search events'
+  code: |
+    var mockData = {
+      type: 'job_detail_view',
+      roadtrip_client_uuid: 'test-uuid',
+      search_term: 'leftover value',
+      linked_domains: 'auto'
+    };
+    mock('getCookieValues', function(name) { return []; });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/jobs/123';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Job'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    runCode(mockData);
+    assertThat(pixelUrl).contains('type=job_detail_view');
+    assertThat(pixelUrl.indexOf('searchTerm=')).isEqualTo(-1);
+    assertThat(pixelUrl.indexOf('leftover')).isEqualTo(-1);
+
+- name: 'Search Term - empty search term omits the key entirely'
+  code: |
+    var mockData = {
+      type: 'search',
+      roadtrip_client_uuid: 'test-uuid',
+      search_term: '',
+      linked_domains: 'auto'
+    };
+    mock('getCookieValues', function(name) { return []; });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/vacatures';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    var pixelFired = false;
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; pixelFired = true; onSuccess(); });
+    mock('readTitle', function() { return 'Search results'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    runCode(mockData);
+    assertThat(pixelFired).isEqualTo(true);
+    assertThat(pixelUrl).contains('type=search');
+    assertThat(pixelUrl.indexOf('searchTerm=')).isEqualTo(-1);
 
 ___NOTES___
 
