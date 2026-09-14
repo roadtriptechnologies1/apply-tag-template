@@ -11,7 +11,7 @@ ___INFO___
 {
   "type": "TAG",
   "id": "cvt_temp_public_id",
-  "version": 1,
+  "version": 21,
   "securityGroups": [],
   "displayName": "Roadtrip Explorer",
   "categories": [
@@ -220,6 +220,8 @@ const JSON = require('JSON');
 const toBase64 = require('toBase64');
 const fromBase64 = require('fromBase64');
 
+const TEMPLATE_VERSION = 21;
+
 const currentUrl = getUrl();
 var urlParamsStorageDurationDays = data.url_params_storage_duration_days;
 if (!urlParamsStorageDurationDays) {
@@ -409,6 +411,7 @@ var roadtripUniqueId = randomId();
 
 var postData = {
   type: data.type,
+  templateVersion: TEMPLATE_VERSION,
   roadtripClientUuid: data.roadtrip_client_uuid,
   roadtripUniqueId: roadtripUniqueId,
   atsJobId: data.ats_job_id,
@@ -2151,7 +2154,32 @@ scenarios:
     assertThat(pixelUrl).contains('type=search');
     assertThat(pixelUrl.indexOf('searchTerm=')).isEqualTo(-1);
 
+- name: 'Pixel Construction - Template version is included in pixel URL'
+  code: |
+    var mockData = {
+      type: 'job_detail_view',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    mock('getCookieValues', function(name) { return []; });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/jobs';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Jobs'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    runCode(mockData);
+    assertThat(pixelUrl).contains('templateVersion=21');
+
 ___NOTES___
 
-Created on 2/25/2026, 11:01:43 AM
-Updated on 5/7/2026
+Created on 25/2/2026
+Updated on 14/9/2026
