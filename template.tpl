@@ -11,7 +11,7 @@ ___INFO___
 {
   "type": "TAG",
   "id": "cvt_temp_public_id",
-  "version": 21,
+  "version": 22,
   "securityGroups": [],
   "displayName": "Roadtrip Explorer",
   "categories": [
@@ -220,7 +220,7 @@ const JSON = require('JSON');
 const toBase64 = require('toBase64');
 const fromBase64 = require('fromBase64');
 
-const TEMPLATE_VERSION = 21;
+const TEMPLATE_VERSION = 22;
 
 const currentUrl = getUrl();
 var urlParamsStorageDurationDays = data.url_params_storage_duration_days;
@@ -479,7 +479,7 @@ setInWindow(
   true
 );
 
-const linkerScriptUrl = 'https://persistexplorer.ams3.cdn.digitaloceanspaces.com/rx-linker.js';
+const linkerScriptUrl = 'https://cdn.explorerdash.com/rx-linker.js';
 injectScript(linkerScriptUrl, function() {}, function() {}, 'rxLinkerScript');
 
 
@@ -764,7 +764,7 @@ ___WEB_PERMISSIONS___
             "listItem": [
               {
                 "type": 1,
-                "string": "https://persistexplorer.ams3.cdn.digitaloceanspaces.com/rx-linker.js"
+                "string": "https://cdn.explorerdash.com/rx-linker.js"
               }
             ]
           }
@@ -2177,7 +2177,7 @@ scenarios:
     mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
-    assertThat(pixelUrl).contains('templateVersion=21');
+    assertThat(pixelUrl).contains('templateVersion=22');
 
 ___NOTES___
 
