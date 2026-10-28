@@ -2,9 +2,11 @@ homepage: "https://www.roadtrip.agency"
 documentation: "https://muuh.roadtrip.agency"
 versions:
   # Latest version
+  - sha: 0f50e48be5e60dbf6735328414daa91b0e51b3e5
+    changeNotes: record consent mode v2 state and detected CMP
+  # Older versions
   - sha: b8ad23669dc9430d545515d9414f629ef70c43a3
     changeNotes: change linker script endpoint
-  # Older versions
   - sha: d10b8da770b3b558e48e0c8156e8af9e05cb8321
     changeNotes: add version
   - sha: 3f937f1a22a3875f27954b84cd649744da14f2e7
