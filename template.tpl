@@ -11,7 +11,7 @@ ___INFO___
 {
   "type": "TAG",
   "id": "cvt_temp_public_id",
-  "version": 22,
+  "version": 1,
   "securityGroups": [],
   "displayName": "Roadtrip Explorer",
   "categories": [
@@ -219,8 +219,10 @@ const setInWindow = require('setInWindow');
 const JSON = require('JSON');
 const toBase64 = require('toBase64');
 const fromBase64 = require('fromBase64');
+const isConsentGranted = require('isConsentGranted');
+const copyFromWindow = require('copyFromWindow');
 
-const TEMPLATE_VERSION = 22;
+const TEMPLATE_VERSION = 24;
 
 const currentUrl = getUrl();
 var urlParamsStorageDurationDays = data.url_params_storage_duration_days;
@@ -314,6 +316,63 @@ function normalizeJobVariables(table) {
     }
   }
   return result;
+}
+
+// Google Consent Mode v2 state, recorded only (never used to gate behaviour).
+// Note: isConsentGranted reports a type that was never set as granted.
+var CONSENT_TYPES = {
+  consentAdStorage: 'ad_storage',
+  consentAnalyticsStorage: 'analytics_storage',
+  consentAdUserData: 'ad_user_data',
+  consentAdPersonalization: 'ad_personalization'
+};
+
+// Best-effort CMP detection by known globals and cookies. Only the CMP name
+// is recorded, never cookie contents. Specific CMPs come before generic TCF
+// because most of them also expose __tcfapi.
+var CMP_SIGNATURES = [
+  { name: 'cookiebot',          globals: ['Cookiebot'],           cookies: ['CookieConsent'] },
+  { name: 'onetrust',           globals: ['OneTrust'],            cookies: ['OptanonConsent'] },
+  { name: 'usercentrics',       globals: ['UC_UI', '__ucCmp'],    cookies: [] },
+  { name: 'didomi',             globals: ['Didomi'],              cookies: ['didomi_token'] },
+  { name: 'cookieyes',          globals: ['getCkyConsent'],       cookies: ['cookieyes-consent'] },
+  { name: 'cookiehub',          globals: ['cookiehub'],           cookies: ['cookiehub'] },
+  { name: 'cookie_information', globals: ['CookieInformation'],   cookies: ['CookieInformationConsent'] },
+  { name: 'cookiefirst',        globals: ['CookieFirst'],         cookies: ['cookiefirst-consent'] },
+  { name: 'cookie_script',      globals: ['CookieScript'],        cookies: ['CookieScriptConsent'] },
+  { name: 'complianz',          globals: [],                      cookies: ['cmplz_banner-status'] },
+  { name: 'borlabs',            globals: ['BorlabsCookie'],       cookies: ['borlabs-cookie'] },
+  { name: 'axeptio',            globals: ['axeptioSettings'],     cookies: ['axeptio_cookies'] },
+  { name: 'osano',              globals: ['Osano'],               cookies: ['osano_consentmanager'] },
+  { name: 'trustarc',           globals: ['truste'],              cookies: ['notice_behavior'] },
+  { name: 'iubenda',            globals: ['_iub'],                cookies: [] },
+  { name: 'klaro',              globals: ['klaro'],               cookies: ['klaro'] },
+  { name: 'sourcepoint',        globals: ['_sp_'],                cookies: [] },
+  { name: 'tcf_other',          globals: ['__tcfapi'],            cookies: ['euconsent-v2'] }
+];
+
+function readConsentState() {
+  var result = {};
+  for (var key in CONSENT_TYPES) {
+    if (CONSENT_TYPES.hasOwnProperty(key)) {
+      result[key] = isConsentGranted(CONSENT_TYPES[key]) ? 'granted' : 'denied';
+    }
+  }
+  return result;
+}
+
+function detectCmp() {
+  for (var i = 0; i < CMP_SIGNATURES.length; i++) {
+    var cmp = CMP_SIGNATURES[i];
+    // Cookies first: cheap to read, whereas copyFromWindow copies the object
+    for (var c = 0; c < cmp.cookies.length; c++) {
+      if (getCookie(cmp.cookies[c]).length) return cmp.name;
+    }
+    for (var g = 0; g < cmp.globals.length; g++) {
+      if (copyFromWindow(cmp.globals[g])) return cmp.name;
+    }
+  }
+  return 'none';
 }
 
 var urlParams = parseQuery(getUrl('query'));
@@ -430,8 +489,16 @@ var postData = {
   sessionId: sessionId,
   currentUrl: currentUrl,
   pageTitle: readTitle(),
-  referrer: rawReferrer
+  referrer: rawReferrer,
+  cmp: detectCmp()
 };
+
+var consentState = readConsentState();
+for (var cKey in consentState) {
+  if (consentState.hasOwnProperty(cKey)) {
+    postData[cKey] = consentState[cKey];
+  }
+}
 
 // Search term is only meaningful on search events
 if (data.type === 'search' && data.search_term) {
@@ -557,6 +624,66 @@ ___WEB_PERMISSIONS___
               {
                 "type": 1,
                 "string": "_gcl_aw"
+              },
+              {
+                "type": 1,
+                "string": "CookieConsent"
+              },
+              {
+                "type": 1,
+                "string": "OptanonConsent"
+              },
+              {
+                "type": 1,
+                "string": "didomi_token"
+              },
+              {
+                "type": 1,
+                "string": "cookieyes-consent"
+              },
+              {
+                "type": 1,
+                "string": "cookiehub"
+              },
+              {
+                "type": 1,
+                "string": "CookieInformationConsent"
+              },
+              {
+                "type": 1,
+                "string": "cookiefirst-consent"
+              },
+              {
+                "type": 1,
+                "string": "CookieScriptConsent"
+              },
+              {
+                "type": 1,
+                "string": "cmplz_banner-status"
+              },
+              {
+                "type": 1,
+                "string": "borlabs-cookie"
+              },
+              {
+                "type": 1,
+                "string": "axeptio_cookies"
+              },
+              {
+                "type": 1,
+                "string": "osano_consentmanager"
+              },
+              {
+                "type": 1,
+                "string": "notice_behavior"
+              },
+              {
+                "type": 1,
+                "string": "klaro"
+              },
+              {
+                "type": 1,
+                "string": "euconsent-v2"
               }
             ]
           }
@@ -826,6 +953,854 @@ ___WEB_PERMISSIONS___
                     "boolean": false
                   }
                 ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  },
+                  {
+                    "type": 1,
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "Cookiebot"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  },
+                  {
+                    "type": 1,
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "OneTrust"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  },
+                  {
+                    "type": 1,
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "UC_UI"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  },
+                  {
+                    "type": 1,
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "__ucCmp"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  },
+                  {
+                    "type": 1,
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "Didomi"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  },
+                  {
+                    "type": 1,
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "getCkyConsent"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  },
+                  {
+                    "type": 1,
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "cookiehub"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  },
+                  {
+                    "type": 1,
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "CookieInformation"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  },
+                  {
+                    "type": 1,
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "CookieFirst"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  },
+                  {
+                    "type": 1,
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "CookieScript"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  },
+                  {
+                    "type": 1,
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "BorlabsCookie"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  },
+                  {
+                    "type": 1,
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "axeptioSettings"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  },
+                  {
+                    "type": 1,
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "Osano"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  },
+                  {
+                    "type": 1,
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "truste"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  },
+                  {
+                    "type": 1,
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "_iub"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  },
+                  {
+                    "type": 1,
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "klaro"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  },
+                  {
+                    "type": 1,
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "_sp_"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  },
+                  {
+                    "type": 1,
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "__tcfapi"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "clientAnnotations": {
+      "isEditedByUser": true
+    },
+    "isRequired": true
+  },
+  {
+    "instance": {
+      "key": {
+        "publicId": "access_consent",
+        "versionId": "1"
+      },
+      "param": [
+        {
+          "key": "consentTypes",
+          "value": {
+            "type": 2,
+            "listItem": [
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "consentType"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "ad_storage"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "consentType"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "analytics_storage"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "consentType"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "ad_user_data"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "consentType"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "ad_personalization"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
               }
             ]
           }
@@ -838,6 +1813,7 @@ ___WEB_PERMISSIONS___
     "isRequired": true
   }
 ]
+
 
 ___TESTS___
 
@@ -1733,7 +2709,7 @@ scenarios:
       injectedUrl = url;
     });
     runCode(mockData);
-    assertThat(injectedUrl).isEqualTo('https://persistexplorer.ams3.cdn.digitaloceanspaces.com/rx-linker.js');
+    assertThat(injectedUrl).isEqualTo('https://cdn.explorerdash.com/rx-linker.js');
 
 - name: 'Event Types - apply_complete type passed correctly in pixel'
   code: |
@@ -2177,7 +3153,216 @@ scenarios:
     mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
-    assertThat(pixelUrl).contains('templateVersion=22');
+    assertThat(pixelUrl).contains('templateVersion=24');
+
+- name: 'Consent - Consent Mode v2 states are recorded per type'
+  code: |
+    var mockData = {
+      type: 'job_detail_view',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/jobs';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Jobs'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    mock('getCookieValues', function(name) { return []; });
+    mock('copyFromWindow', function(key) { return undefined; });
+    mock('isConsentGranted', function(type) {
+      return type === 'analytics_storage' || type === 'ad_user_data';
+    });
+    runCode(mockData);
+    assertThat(pixelUrl).contains('consentAdStorage=denied');
+    assertThat(pixelUrl).contains('consentAnalyticsStorage=granted');
+    assertThat(pixelUrl).contains('consentAdUserData=granted');
+    assertThat(pixelUrl).contains('consentAdPersonalization=denied');
+
+- name: 'Consent - Pixel still fires when all consent is denied'
+  code: |
+    var mockData = {
+      type: 'job_detail_view',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/jobs';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Jobs'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    mock('getCookieValues', function(name) { return []; });
+    mock('copyFromWindow', function(key) { return undefined; });
+    mock('isConsentGranted', function(type) { return false; });
+    runCode(mockData);
+    assertThat(pixelUrl).contains('type=job_detail_view');
+    assertThat(pixelUrl).contains('consentAdStorage=denied');
+    assertThat(pixelUrl).contains('consentAnalyticsStorage=denied');
+    assertThat(pixelUrl).contains('consentAdUserData=denied');
+    assertThat(pixelUrl).contains('consentAdPersonalization=denied');
+
+- name: 'CMP Detection - Detected by cookie'
+  code: |
+    var mockData = {
+      type: 'job_detail_view',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/jobs';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Jobs'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    mock('getCookieValues', function(name) {
+      if (name === 'OptanonConsent') { return ['isGpcEnabled=0&groups=C0001:1']; }
+      return [];
+    });
+    mock('copyFromWindow', function(key) { return undefined; });
+    runCode(mockData);
+    assertThat(pixelUrl).contains('cmp=onetrust');
+    assertThat(pixelUrl.indexOf('isGpcEnabled')).isEqualTo(-1);
+
+- name: 'CMP Detection - Detected by window global'
+  code: |
+    var mockData = {
+      type: 'job_detail_view',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/jobs';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Jobs'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    mock('getCookieValues', function(name) { return []; });
+    mock('copyFromWindow', function(key) {
+      if (key === 'Cookiebot') { return { consented: false }; }
+      return undefined;
+    });
+    runCode(mockData);
+    assertThat(pixelUrl).contains('cmp=cookiebot');
+
+- name: 'CMP Detection - Specific CMP wins over generic TCF'
+  code: |
+    var mockData = {
+      type: 'job_detail_view',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/jobs';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Jobs'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    mock('getCookieValues', function(name) {
+      if (name === 'euconsent-v2') { return ['CPxyz']; }
+      return [];
+    });
+    mock('copyFromWindow', function(key) {
+      if (key === '__tcfapi' || key === 'Didomi') { return function() {}; }
+      return undefined;
+    });
+    runCode(mockData);
+    assertThat(pixelUrl).contains('cmp=didomi');
+
+- name: 'CMP Detection - Generic TCF when no known CMP matches'
+  code: |
+    var mockData = {
+      type: 'job_detail_view',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/jobs';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Jobs'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    mock('getCookieValues', function(name) { return []; });
+    mock('copyFromWindow', function(key) {
+      if (key === '__tcfapi') { return function() {}; }
+      return undefined;
+    });
+    runCode(mockData);
+    assertThat(pixelUrl).contains('cmp=tcf_other');
+
+- name: 'CMP Detection - none when no CMP is found'
+  code: |
+    var mockData = {
+      type: 'job_detail_view',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/jobs';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Jobs'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    mock('getCookieValues', function(name) { return []; });
+    mock('copyFromWindow', function(key) { return undefined; });
+    runCode(mockData);
+    assertThat(pixelUrl).contains('cmp=none');
 
 ___NOTES___
 
