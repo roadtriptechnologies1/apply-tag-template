@@ -222,7 +222,7 @@ const fromBase64 = require('fromBase64');
 const isConsentGranted = require('isConsentGranted');
 const copyFromWindow = require('copyFromWindow');
 
-const TEMPLATE_VERSION = 24;
+const TEMPLATE_VERSION = 25;
 
 const currentUrl = getUrl();
 var urlParamsStorageDurationDays = data.url_params_storage_duration_days;
@@ -445,7 +445,7 @@ if (referrerParams.gclid) {
 // A new utm_source signals a new campaign touch: clear ALL stored UTM keys
 // first so stale values from a previous touch can't combine with the new
 // source into a pair that never existed on any real link.
-var UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+var UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'utm_id'];
 
 if (urlParams.utm_source || referrerParams.utm_source) {
   for (var c = 0; c < UTM_KEYS.length; c++) {
@@ -484,6 +484,7 @@ var postData = {
   utmCampaign: utm.utm_campaign,
   utmTerm: utm.utm_term,
   utmContent: utm.utm_content,
+  utmId: utm.utm_id,
   clientApplicationTimestamp: timestamp(),
   jobmatrixId: data.jobmatrix_id,
   sessionId: sessionId,
@@ -2114,7 +2115,7 @@ scenarios:
     runCode(mockData);
     assertThat(pixelFired).isEqualTo(true);
 
-- name: 'UTM Parameters - All five UTM keys captured from URL'
+- name: 'UTM Parameters - All six UTM keys captured from URL'
   code: |
     var mockData = {
       type: 'job_detail_view',
@@ -2123,7 +2124,7 @@ scenarios:
     };
     mock('getCookieValues', function(name) { return []; });
     mock('getUrl', function(part) {
-      if (part === 'query') { return 'utm_source=google&utm_medium=cpc&utm_campaign=jobs&utm_term=engineer&utm_content=banner'; }
+      if (part === 'query') { return 'utm_source=google&utm_medium=cpc&utm_campaign=jobs&utm_term=engineer&utm_content=banner&utm_id=120210000'; }
       if (part === 'host') { return 'example.com'; }
       return 'https://example.com/jobs';
     });
@@ -2142,6 +2143,7 @@ scenarios:
     assertThat(pixelUrl).contains('utmCampaign=jobs');
     assertThat(pixelUrl).contains('utmTerm=engineer');
     assertThat(pixelUrl).contains('utmContent=banner');
+    assertThat(pixelUrl).contains('utmId=120210000');
 
 - name: 'UTM Parameters - Previously stored UTMs used when none in URL'
   code: |
@@ -2171,6 +2173,34 @@ scenarios:
     runCode(mockData);
     assertThat(pixelUrl).contains('utmSource=linkedin');
     assertThat(pixelUrl).contains('utmMedium=social');
+
+- name: 'UTM Parameters - Stored utm_id used on a later page without UTMs'
+  code: |
+    var mockData = {
+      type: 'apply_complete',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    mock('getCookieValues', function(name) {
+      if (name === 'rx_params') { return ['utm_source=facebook&utm_medium=paid_social&utm_id=120210000']; }
+      return [];
+    });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/apply/complete';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Apply Complete'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    runCode(mockData);
+    assertThat(pixelUrl).contains('utmId=120210000');
 
 - name: 'UTM Parameters - New UTMs in URL override stored UTMs'
   code: |
@@ -2994,7 +3024,7 @@ scenarios:
       linked_domains: 'auto'
     };
     mock('getCookieValues', function(name) {
-      if (name === 'rx_params') { return ['utm_source=tzorg&utm_medium=algemeen_hamburger&utm_campaign=oud']; }
+      if (name === 'rx_params') { return ['utm_source=tzorg&utm_medium=algemeen_hamburger&utm_campaign=oud&utm_id=999']; }
       return [];
     });
     mock('getUrl', function(part) {
@@ -3018,6 +3048,7 @@ scenarios:
     assertThat(pixelUrl).contains('utmSource=bijbaan_nl');
     assertThat(pixelUrl.indexOf('utmMedium=algemeen_hamburger')).isEqualTo(-1);
     assertThat(pixelUrl.indexOf('utmCampaign=oud')).isEqualTo(-1);
+    assertThat(pixelUrl.indexOf('utmId=')).isEqualTo(-1);
     assertThat(paramsCookieValue.indexOf('algemeen_hamburger')).isEqualTo(-1);
 
 - name: 'Event Types - search type passed with search term'
@@ -3153,7 +3184,7 @@ scenarios:
     mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
-    assertThat(pixelUrl).contains('templateVersion=24');
+    assertThat(pixelUrl).contains('templateVersion=25');
 
 - name: 'Consent - Consent Mode v2 states are recorded per type'
   code: |
