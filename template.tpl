@@ -221,8 +221,9 @@ const toBase64 = require('toBase64');
 const fromBase64 = require('fromBase64');
 const isConsentGranted = require('isConsentGranted');
 const copyFromWindow = require('copyFromWindow');
+const callInWindow = require('callInWindow');
 
-const TEMPLATE_VERSION = 25;
+const TEMPLATE_VERSION = 26;
 
 const currentUrl = getUrl();
 var urlParamsStorageDurationDays = data.url_params_storage_duration_days;
@@ -515,11 +516,23 @@ for (var jKey in jobVariables) {
 
 var pixelUrl = 'https://events.explorerdash.com/?' + buildQuery(postData);
 
-sendPixel(
-  pixelUrl,
-  function() { data.gtmOnSuccess(); },
-  function() { data.gtmOnFailure(); }
-);
+// An image request can be cancelled when the page navigates right after the
+// event (apply complete followed by a redirect to a thank-you page). When
+// rx-linker.js has already loaded on this page it exposes _rxSend, which sends
+// the same GET with fetch keepalive so it survives the navigation. The sandbox
+// has no such API of its own, so fall back to the pixel when _rxSend is absent.
+// "transport" records which path was used, so the two can be compared.
+var sentWithKeepalive = callInWindow('_rxSend', pixelUrl + '&transport=keepalive');
+
+if (sentWithKeepalive === true) {
+  data.gtmOnSuccess();
+} else {
+  sendPixel(
+    pixelUrl + '&transport=pixel',
+    function() { data.gtmOnSuccess(); },
+    function() { data.gtmOnFailure(); }
+  );
+}
 
 // Cross-domain sender
 var linkedDomainsStr = data.linked_domains || 'auto';
@@ -952,6 +965,45 @@ ___WEB_PERMISSIONS___
                   {
                     "type": 8,
                     "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  },
+                  {
+                    "type": 1,
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "_rxSend"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
                   }
                 ]
               },
@@ -3184,7 +3236,66 @@ scenarios:
     mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
-    assertThat(pixelUrl).contains('templateVersion=25');
+    assertThat(pixelUrl).contains('templateVersion=26');
+
+- name: 'Transport - Uses the keepalive sender when the linker script provides it'
+  code: |
+    var mockData = {
+      type: 'apply_complete',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    mock('getCookieValues', function(name) { return []; });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/apply';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var keepaliveUrl = '';
+    mock('callInWindow', function(path, url) {
+      if (path === '_rxSend') { keepaliveUrl = url; return true; }
+    });
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Apply'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    runCode(mockData);
+    assertThat(keepaliveUrl).contains('https://events.explorerdash.com/?');
+    assertThat(keepaliveUrl).contains('transport=keepalive');
+    assertThat(pixelUrl).isEqualTo('');
+    assertApi('gtmOnSuccess').wasCalled();
+
+- name: 'Transport - Falls back to the pixel when the keepalive sender is absent'
+  code: |
+    var mockData = {
+      type: 'apply_complete',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    mock('getCookieValues', function(name) { return []; });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/apply';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    mock('callInWindow', function(path, url) { return undefined; });
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Apply'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    runCode(mockData);
+    assertThat(pixelUrl).contains('transport=pixel');
+    assertApi('gtmOnSuccess').wasCalled();
 
 - name: 'Consent - Consent Mode v2 states are recorded per type'
   code: |
