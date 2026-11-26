@@ -236,7 +236,7 @@ const COOKIE = {
   SESSION: 'rx_session',
   PARAMS: 'rx_params',
   LINKEDIN: 'li_fat_id',
-  FACEBOOK: '_fbp',
+  FACEBOOK: '_fbc',
   GOOGLE_ADS: '_gcl_aw',
   BILLY: '__BillyPix_uid',
   MICROSOFT_ADS: '_uetmsclkid'
@@ -641,7 +641,7 @@ ___WEB_PERMISSIONS___
               },
               {
                 "type": 1,
-                "string": "_fbp"
+                "string": "_fbc"
               },
               {
                 "type": 1,
@@ -2420,7 +2420,7 @@ scenarios:
     };
     mock('getCookieValues', function(name) {
       if (name === 'li_fat_id') { return ['li_fat_abc123']; }
-      if (name === '_fbp') { return ['fb111']; }
+      if (name === '_fbc') { return ['fb111']; }
       if (name === '_gcl_aw') { return ['GCL111']; }
       if (name === '__BillyPix_uid') { return ['billy111']; }
       if (name === '_uetmsclkid') { return ['_uetMS111']; }
