@@ -2,9 +2,11 @@ homepage: "https://www.roadtrip.agency"
 documentation: "https://muuh.roadtrip.agency"
 versions:
   # Latest version
+  - sha: 1edd66305790598ff0264c8d29dda0d7c264474f
+    changeNotes: send events with fetch keepalive so they survive a redirect
+  # Older versions
   - sha: dd225debb22e9391c276a88ea9d12a7c32e905e9
     changeNotes: capture utm_id
-  # Older versions
   - sha: 0f50e48be5e60dbf6735328414daa91b0e51b3e5
     changeNotes: record consent mode v2 state and detected CMP
   - sha: b8ad23669dc9430d545515d9414f629ef70c43a3
