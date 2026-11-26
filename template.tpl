@@ -83,8 +83,9 @@ ___TEMPLATE_PARAMETERS___
   },
   {
     "type": "TEXT",
-    "name": "jobmatrix_id",
-    "displayName": "Jobmatrix ID",
+    "name": "jobmatix_id",
+    "displayName": "Jobmatix ID",
+    "help": "Leave empty to use the jm_id URL parameter, which is stored with the UTMs.",
     "simpleValueType": true
   },
   {
@@ -223,7 +224,7 @@ const isConsentGranted = require('isConsentGranted');
 const copyFromWindow = require('copyFromWindow');
 const callInWindow = require('callInWindow');
 
-const TEMPLATE_VERSION = 26;
+const TEMPLATE_VERSION = 27;
 
 const currentUrl = getUrl();
 var urlParamsStorageDurationDays = data.url_params_storage_duration_days;
@@ -236,7 +237,9 @@ const COOKIE = {
   PARAMS: 'rx_params',
   LINKEDIN: 'li_fat_id',
   FACEBOOK: '_fbp',
-  GOOGLE_ADS: '_gcl_aw'
+  GOOGLE_ADS: '_gcl_aw',
+  BILLY: '__BillyPix_uid',
+  MICROSOFT_ADS: '_uetmsclkid'
 };
 
 const COOKIE_OPTIONS = {
@@ -382,7 +385,9 @@ var cookies = {
   params: getCookie(COOKIE.PARAMS)[0],
   linkedin: getCookie(COOKIE.LINKEDIN)[0],
   facebook: getCookie(COOKIE.FACEBOOK)[0],
-  googleAds: getCookie(COOKIE.GOOGLE_ADS)[0]
+  googleAds: getCookie(COOKIE.GOOGLE_ADS)[0],
+  billy: getCookie(COOKIE.BILLY)[0],
+  microsoftAds: getCookie(COOKIE.MICROSOFT_ADS)[0]
 };
 
 var sessionId = cookies.session;
@@ -446,7 +451,8 @@ if (referrerParams.gclid) {
 // A new utm_source signals a new campaign touch: clear ALL stored UTM keys
 // first so stale values from a previous touch can't combine with the new
 // source into a pair that never existed on any real link.
-var UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'utm_id'];
+// jm_id (Jobmatix click ID) belongs to the same touch, so it is kept with them.
+var UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'utm_id', 'jm_id'];
 
 if (urlParams.utm_source || referrerParams.utm_source) {
   for (var c = 0; c < UTM_KEYS.length; c++) {
@@ -480,6 +486,8 @@ var postData = {
   facebookId: cookies.facebook,
   linkedInId: cookies.linkedin,
   googleAdsGclid: cookies.googleAds,
+  billyPixUid: cookies.billy,
+  microsoftAdsMsclkid: cookies.microsoftAds,
   utmSource: utm.utm_source,
   utmMedium: utm.utm_medium,
   utmCampaign: utm.utm_campaign,
@@ -487,7 +495,7 @@ var postData = {
   utmContent: utm.utm_content,
   utmId: utm.utm_id,
   clientApplicationTimestamp: timestamp(),
-  jobmatrixId: data.jobmatrix_id,
+  jobmatixId: data.jobmatix_id || utm.jm_id,
   sessionId: sessionId,
   currentUrl: currentUrl,
   pageTitle: readTitle(),
@@ -638,6 +646,14 @@ ___WEB_PERMISSIONS___
               {
                 "type": 1,
                 "string": "_gcl_aw"
+              },
+              {
+                "type": 1,
+                "string": "__BillyPix_uid"
+              },
+              {
+                "type": 1,
+                "string": "_uetmsclkid"
               },
               {
                 "type": 1,
@@ -2406,6 +2422,8 @@ scenarios:
       if (name === 'li_fat_id') { return ['li_fat_abc123']; }
       if (name === '_fbp') { return ['fb111']; }
       if (name === '_gcl_aw') { return ['GCL111']; }
+      if (name === '__BillyPix_uid') { return ['billy111']; }
+      if (name === '_uetmsclkid') { return ['_uetMS111']; }
       return [];
     });
     mock('getUrl', function(part) {
@@ -2426,6 +2444,91 @@ scenarios:
     assertThat(pixelUrl).contains('linkedInId=li_fat_abc123');
     assertThat(pixelUrl).contains('facebookId=fb111');
     assertThat(pixelUrl).contains('googleAdsGclid=GCL111');
+    assertThat(pixelUrl).contains('billyPixUid=billy111');
+    assertThat(pixelUrl).contains('microsoftAdsMsclkid=_uetMS111');
+
+- name: 'Jobmatix - jm_id from the URL is stored and sent as jobmatixId'
+  code: |
+    var mockData = {
+      type: 'job_detail_view',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    mock('getCookieValues', function(name) { return []; });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return 'utm_source=jobmatix-jooble&utm_medium=cpc&jm_reference=1324314&jm_id=01M8BDSRD4GWPKJ19VAV5VG6HA'; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/vacatures/1324314';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    var paramsCookie = '';
+    mock('setCookie', function(name, value, opts) { if (name === 'rx_params') { paramsCookie = value; } });
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Jobs'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    runCode(mockData);
+    assertThat(pixelUrl).contains('jobmatixId=01M8BDSRD4GWPKJ19VAV5VG6HA');
+    assertThat(paramsCookie).contains('jm_id=01M8BDSRD4GWPKJ19VAV5VG6HA');
+
+- name: 'Jobmatix - stored jm_id is sent on a later page without it'
+  code: |
+    var mockData = {
+      type: 'apply_complete',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    mock('getCookieValues', function(name) {
+      if (name === 'rx_params') { return ['utm_source=jobmatix-jooble&utm_medium=cpc&jm_id=JM123']; }
+      return [];
+    });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/apply/done';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Done'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    runCode(mockData);
+    assertThat(pixelUrl).contains('jobmatixId=JM123');
+
+- name: 'Jobmatix - a new utm_source without jm_id clears the stored jm_id'
+  code: |
+    var mockData = {
+      type: 'job_detail_view',
+      roadtrip_client_uuid: 'test-uuid',
+      linked_domains: 'auto'
+    };
+    mock('getCookieValues', function(name) {
+      if (name === 'rx_params') { return ['utm_source=jobmatix-jooble&utm_medium=cpc&jm_id=JM123']; }
+      return [];
+    });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return 'utm_source=linkedin&utm_medium=social'; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/jobs';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Jobs'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    runCode(mockData);
+    assertThat(pixelUrl.indexOf('jobmatixId=')).isEqualTo(-1);
 
 - name: 'Pixel Construction - Fires to correct endpoint'
   code: |
@@ -2460,7 +2563,7 @@ scenarios:
       ats_job_id: 'job-456',
       ats_job_title: 'Software Engineer',
       ats_application_id: 'app-789',
-      jobmatrix_id: 'jm-001',
+      jobmatix_id: 'jm-001',
       linked_domains: 'auto'
     };
     mock('getCookieValues', function(name) { return []; });
@@ -2485,7 +2588,7 @@ scenarios:
     assertThat(pixelUrl.indexOf('roadtripUniqueId=&')).isEqualTo(-1);
     assertThat(pixelUrl).contains('atsJobId=job-456');
     assertThat(pixelUrl).contains('atsApplicationId=app-789');
-    assertThat(pixelUrl).contains('jobmatrixId=jm-001');
+    assertThat(pixelUrl).contains('jobmatixId=jm-001');
     assertThat(pixelUrl).contains('sessionId=');
     assertThat(pixelUrl).contains('currentUrl=');
     assertThat(pixelUrl).contains('pageTitle=');
@@ -3236,7 +3339,7 @@ scenarios:
     mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
-    assertThat(pixelUrl).contains('templateVersion=26');
+    assertThat(pixelUrl).contains('templateVersion=27');
 
 - name: 'Transport - Uses the keepalive sender when the linker script provides it'
   code: |
