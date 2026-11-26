@@ -224,7 +224,7 @@ const isConsentGranted = require('isConsentGranted');
 const copyFromWindow = require('copyFromWindow');
 const callInWindow = require('callInWindow');
 
-const TEMPLATE_VERSION = 27;
+const TEMPLATE_VERSION = 28;
 
 const currentUrl = getUrl();
 var urlParamsStorageDurationDays = data.url_params_storage_duration_days;
@@ -3339,7 +3339,7 @@ scenarios:
     mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
-    assertThat(pixelUrl).contains('templateVersion=27');
+    assertThat(pixelUrl).contains('templateVersion=28');
 
 - name: 'Transport - Uses the keepalive sender when the linker script provides it'
   code: |
