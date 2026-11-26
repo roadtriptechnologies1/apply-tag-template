@@ -2,9 +2,11 @@ homepage: "https://www.roadtrip.agency"
 documentation: "https://muuh.roadtrip.agency"
 versions:
   # Latest version
+  - sha: 4d468430fe969a54520d2139864b724db26c766d
+    changeNotes: add Custom event type with event name and value
+  # Older versions
   - sha: b26bae64ef48ea3eec6e70bdbb6ad4de636e31ea
     changeNotes: read Facebook click ID from _fbc cookie instead of _fbp
-  # Older versions
   - sha: a1b75057253aa489b46c2fb0499126d0b769eda3
     changeNotes: capture jm_id, Billy and Microsoft Ads click IDs; rename Jobmatrix ID to Jobmatix ID
   - sha: 1edd66305790598ff0264c8d29dda0d7c264474f
