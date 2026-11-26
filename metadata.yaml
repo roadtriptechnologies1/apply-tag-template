@@ -2,9 +2,11 @@ homepage: "https://www.roadtrip.agency"
 documentation: "https://muuh.roadtrip.agency"
 versions:
   # Latest version
+  - sha: b26bae64ef48ea3eec6e70bdbb6ad4de636e31ea
+    changeNotes: read Facebook click ID from _fbc cookie instead of _fbp
+  # Older versions
   - sha: a1b75057253aa489b46c2fb0499126d0b769eda3
     changeNotes: capture jm_id, Billy and Microsoft Ads click IDs; rename Jobmatrix ID to Jobmatix ID
-  # Older versions
   - sha: 1edd66305790598ff0264c8d29dda0d7c264474f
     changeNotes: send events with fetch keepalive so they survive a redirect
   - sha: dd225debb22e9391c276a88ea9d12a7c32e905e9
