@@ -43,7 +43,8 @@ ___TEMPLATE_PARAMETERS___
       { "value": "apply_start",     "displayValue": "Apply Start" },
       { "value": "search",          "displayValue": "Search" },
       { "value": "job_alert",       "displayValue": "Job Alert" },
-      { "value": "other",           "displayValue": "Other" }
+      { "value": "other",           "displayValue": "Other" },
+      { "value": "custom",          "displayValue": "Custom" }
     ],
     "simpleValueType": true
   },
@@ -55,6 +56,29 @@ ___TEMPLATE_PARAMETERS___
     "simpleValueType": true,
     "enablingConditions": [
       { "paramName": "type", "paramValue": "search", "type": "EQUALS" }
+    ]
+  },
+  {
+    "type": "TEXT",
+    "name": "event_name",
+    "displayName": "Event Name",
+    "help": "Name of the custom event, e.g. podcast_played. Only sent on Custom events.",
+    "simpleValueType": true,
+    "valueValidators": [
+      { "type": "NON_EMPTY" }
+    ],
+    "enablingConditions": [
+      { "paramName": "type", "paramValue": "custom", "type": "EQUALS" }
+    ]
+  },
+  {
+    "type": "TEXT",
+    "name": "event_value",
+    "displayName": "Event Value",
+    "help": "Optional value for the custom event, e.g. the podcast title. Only sent on Custom events.",
+    "simpleValueType": true,
+    "enablingConditions": [
+      { "paramName": "type", "paramValue": "custom", "type": "EQUALS" }
     ]
   },
   {
@@ -224,7 +248,7 @@ const isConsentGranted = require('isConsentGranted');
 const copyFromWindow = require('copyFromWindow');
 const callInWindow = require('callInWindow');
 
-const TEMPLATE_VERSION = 28;
+const TEMPLATE_VERSION = 29;
 
 const currentUrl = getUrl();
 var urlParamsStorageDurationDays = data.url_params_storage_duration_days;
@@ -513,6 +537,16 @@ for (var cKey in consentState) {
 // Search term is only meaningful on search events
 if (data.type === 'search' && data.search_term) {
   postData.searchTerm = data.search_term;
+}
+
+// Event name and value are only meaningful on custom events
+if (data.type === 'custom') {
+  if (data.event_name) {
+    postData.eventName = data.event_name;
+  }
+  if (data.event_value) {
+    postData.eventValue = data.event_value;
+  }
 }
 
 var jobVariables = normalizeJobVariables(data.job_variable_table);
@@ -3316,6 +3350,92 @@ scenarios:
     assertThat(pixelUrl).contains('type=search');
     assertThat(pixelUrl.indexOf('searchTerm=')).isEqualTo(-1);
 
+- name: 'Custom Event - custom type sends event name and value'
+  code: |
+    var mockData = {
+      type: 'custom',
+      roadtrip_client_uuid: 'test-uuid',
+      event_name: 'podcast_played',
+      event_value: 'Life at the hospital',
+      linked_domains: 'auto'
+    };
+    mock('getCookieValues', function(name) { return []; });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/podcast';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Podcast'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    runCode(mockData);
+    assertThat(pixelUrl).contains('type=custom');
+    assertThat(pixelUrl).contains('eventName=podcast_played');
+    assertThat(pixelUrl).contains('eventValue=Life%20at%20the%20hospital');
+
+- name: 'Custom Event - empty event value omits the key entirely'
+  code: |
+    var mockData = {
+      type: 'custom',
+      roadtrip_client_uuid: 'test-uuid',
+      event_name: 'podcast_played',
+      event_value: '',
+      linked_domains: 'auto'
+    };
+    mock('getCookieValues', function(name) { return []; });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/podcast';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Podcast'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    runCode(mockData);
+    assertThat(pixelUrl).contains('eventName=podcast_played');
+    assertThat(pixelUrl.indexOf('eventValue=')).isEqualTo(-1);
+
+- name: 'Custom Event - event name and value not sent on non-custom events'
+  code: |
+    var mockData = {
+      type: 'job_detail_view',
+      roadtrip_client_uuid: 'test-uuid',
+      event_name: 'leftover_name',
+      event_value: 'leftover value',
+      linked_domains: 'auto'
+    };
+    mock('getCookieValues', function(name) { return []; });
+    mock('getUrl', function(part) {
+      if (part === 'query') { return ''; }
+      if (part === 'host') { return 'example.com'; }
+      return 'https://example.com/podcast';
+    });
+    mock('generateRandom', function() { return 1234567; });
+    mock('setCookie', function(name, value, opts) {});
+    var pixelUrl = '';
+    mock('sendPixel', function(url, onSuccess, onFailure) { pixelUrl = url; onSuccess(); });
+    mock('readTitle', function() { return 'Podcast'; });
+    mock('getTimestamp', function() { return 1700000000000; });
+    mock('getReferrerUrl', function() { return ''; });
+    mock('injectScript', function(url, onSuccess, onFailure, key) {});
+    mock('setInWindow', function() {});
+    runCode(mockData);
+    assertThat(pixelUrl).contains('type=job_detail_view');
+    assertThat(pixelUrl.indexOf('eventName=')).isEqualTo(-1);
+    assertThat(pixelUrl.indexOf('eventValue=')).isEqualTo(-1);
+
 - name: 'Pixel Construction - Template version is included in pixel URL'
   code: |
     var mockData = {
@@ -3339,7 +3459,7 @@ scenarios:
     mock('injectScript', function(url, onSuccess, onFailure, key) {});
     mock('setInWindow', function() {});
     runCode(mockData);
-    assertThat(pixelUrl).contains('templateVersion=28');
+    assertThat(pixelUrl).contains('templateVersion=29');
 
 - name: 'Transport - Uses the keepalive sender when the linker script provides it'
   code: |
